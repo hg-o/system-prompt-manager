@@ -282,6 +282,23 @@ body {
   place-items: center;
 }
 .done-icon svg { width: 26px; height: 26px; }
+.status-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.status-icon svg { width: 26px; height: 26px; }
+.status-icon--pending { background: #fff7e6; color: #f59e0b; }
+.status-icon--rejected { background: #fef2f2; color: var(--danger); }
+.status-contact {
+  margin: -16px 0 26px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.status-contact a { color: inherit; }
 .done-message {
   margin: 0 0 26px;
   font-size: 15px;

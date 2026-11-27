@@ -7,15 +7,27 @@
 
   const $ = (sel) => document.querySelector(sel);
 
+  // 승인 대기·반려 안내창 문구
+  const CONTACT = "문의 담당자 : 오하경 (hagyoung.o@webtoon.com)";
+  const STATUS_MESSAGES = {
+    pending: "승인 대기 중입니다.",
+    rejected: "승인이 반려되었습니다.",
+  };
+  const SESSION_KEY = "spm_user"; // 로그인 유지용 localStorage 키
+
   // ---------- API (프로토타입 목업) ----------
-  // 실제 서버 없이 항상 성공을 돌려준다. 백엔드를 붙일 때 이 함수만 바꾸면 된다.
+  // 실제 서버 없이 응답을 흉내 낸다. 백엔드를 붙일 때 이 함수만 바꾸면 된다.
   //
   // 기대하는 응답 형식
-  //   login  요청 { id, password }             → { ok: true, user: { id, name, role } }
-  //                                              { ok: false, message }   (예: 비밀번호 불일치, 승인 대기)
+  //   login  요청 { id, password }             → { ok: true, user: { id, name, role } }        activate = TRUE
+  //                                              { ok: false, status: "pending" }             activate = 빈 칸 (승인 대기)
+  //                                              { ok: false, status: "rejected" }            activate = FALSE (반려)
+  //                                              { ok: false, message }                       그 밖의 실패 (비밀번호 불일치 등)
   //   signup 요청 { name, id, password, role } → { ok: true }
   //                                              { ok: false, field?, message }   (field 가 있으면 해당 입력칸 아래에 표시)
-  //   승인 규칙: 시트(DB)의 activate 가 TRUE 인 계정만 로그인 가능
+  //
+  // 프로토타입 시연용: 아이디에 "pending" 이 들어가면 승인 대기, "rejected" 가 들어가면 반려 안내창이 뜬다.
+  // 그 밖에는 어떤 아이디·비밀번호로도 로그인된다.
   const MOCK_DELAY_MS = 600;
 
   function callApi(action, payload) {
@@ -23,6 +35,8 @@
       setTimeout(() => {
         if (action === "login") {
           const id = payload.id || "guest@webtoon.com";
+          if (id.includes("pending")) return resolve({ ok: false, status: "pending" });
+          if (id.includes("rejected")) return resolve({ ok: false, status: "rejected" });
           resolve({ ok: true, user: { id, name: id.split("@")[0], role: "Editor" } });
         } else {
           resolve({ ok: true });
@@ -95,9 +109,11 @@
     try {
       const data = await callApi("login", { id, password });
       if (!data.ok) {
-        showFormError(loginError, data.message || "로그인에 실패했습니다.");
+        if (STATUS_MESSAGES[data.status]) showStatus(data.status);
+        else showFormError(loginError, data.message || "로그인에 실패했습니다.");
         return;
       }
+      localStorage.setItem(SESSION_KEY, JSON.stringify(data.user));
       showHome(data.user);
     } catch (err) {
       showFormError(loginError, err.message);
@@ -106,8 +122,18 @@
     }
   });
 
+  // ---------- 승인 대기 / 반려 안내 ----------
+  const statusModal = $("#status-modal");
+
+  function showStatus(status) {
+    statusModal.querySelectorAll("[data-status]").forEach((el) => (el.hidden = el.dataset.status !== status));
+    $("#status-message").textContent = STATUS_MESSAGES[status];
+    $("#status-contact").textContent = CONTACT;
+    openModal(statusModal);
+  }
+
   // ---------- 로그인 후 화면 (임시) ----------
-  // 웹 앱은 한 페이지 안에서 화면을 바꾼다. 새로고침하면 다시 로그인해야 한다.
+  // 로그인 정보는 localStorage 에 두어 새로고침하거나 창을 다시 열어도 유지한다. 로그아웃하면 지운다.
   const loginView = $("#login-view");
   const homeView = $("#home-view");
 
@@ -118,10 +144,18 @@
   }
 
   $("#logout").addEventListener("click", () => {
+    localStorage.removeItem(SESSION_KEY);
     loginForm.reset();
     homeView.hidden = true;
     loginView.hidden = false;
   });
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    if (saved && saved.name) showHome(saved);
+  } catch (e) {
+    localStorage.removeItem(SESSION_KEY);
+  }
 
   // ---------- 회원가입 ----------
   const signupModal = $("#signup-modal");
@@ -142,7 +176,7 @@
   function validateSignup(v) {
     const errors = {};
     if (!v.name) errors.name = "이름을 입력해 주세요.";
-    else if (v.name.length > 16) errors.name = "이름은 16자 이내로 입력해 주세요.";
+    else if (v.name.length > 100) errors.name = "이름은 100자 이내로 입력해 주세요.";
 
     if (!v.id) errors.id = "회사 이메일 주소를 입력해 주세요.";
     else if (!EMAIL_RE.test(v.id)) errors.id = "@webtoon.com 이메일 주소만 사용할 수 있습니다.";
