@@ -189,7 +189,7 @@
       .join(SEP_ICON);
 
     if (section === "image") {
-      window.ImagePage.mount($("#image-page"), { tab, user: currentUser, canEdit: currentUser.role === "Editor", openModal });
+      window.ImagePage.mount($("#image-page"), { tab, user: currentUser, canEdit: currentUser.role === "Editor", openModal, closeModal });
     }
     window.scrollTo(0, 0);
   }

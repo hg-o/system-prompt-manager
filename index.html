@@ -219,6 +219,28 @@
     </div>
   </div>
 
+  <!-- 버전·실험안 삭제 확인 -->
+  <div class="modal" id="delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__panel modal__panel--sm modal__panel--delete">
+      <button type="button" class="icon-btn modal__close" data-close aria-label="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      </button>
+      <div class="status-icon status-icon--rejected" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+      </div>
+      <p class="done-message" id="delete-title"></p>
+      <p class="delete-target" id="delete-target"></p>
+      <p class="delete-desc">정말 삭제하시려면 아래에 <b>Delete This Version</b>을 작성한 후 '삭제' 버튼을 누르십시오.</p>
+      <input class="input" id="delete-input" type="text" autocomplete="off" spellcheck="false" placeholder="Delete This Version" aria-label="삭제 확인 문구" />
+      <p class="delete-note" id="delete-note"></p>
+      <div class="delete-actions">
+        <button type="button" class="btn btn--outline" data-close>취소</button>
+        <button type="button" class="btn btn--danger" id="delete-confirm" disabled>삭제</button>
+      </div>
+    </div>
+  </div>
+
   <script src="image.js"></script>
   <script src="app.js"></script>
 </body>

@@ -3,11 +3,14 @@
 // 데이터는 메모리에만 있다. 새로고침하면 샘플 데이터로 돌아간다.
 // 실제 구현에서는 아래 state 구조를 API 로 읽고 쓰면 된다 (HANDOFF.md 참고).
 //
-// 버전 상태 흐름: 실험전(draft) → 실험중(testing) → 실험완료(done) → 최종(final)
-//   실험전   실험안(A~J) 추가·삭제
-//   실험중   갤러리 카드 보기(이미지 크게 + 제목·개선 목적·투표). 카드를 누르면 전체 내용. 투표(이유 필수), 최종 선택(★)
-//   실험완료 ★ 실험안을 Final 로 복제해 다듬고 '최종 확정'
-//   최종     모두 읽기 전용. '새 버전으로 사본 생성'만 가능
+// 버전 상태 흐름: 실험 설계(design) → 실험안 작성(draft) → 실험중(testing) → 실험완료(done) → 최종(final)
+//   실험 설계   실험 설계안 작성 (파일(선택)·제목·개선 목적·본문)
+//   실험안 작성 실험안(A~J) 추가·삭제·작성
+//   실험중      갤러리 카드 보기(이미지 크게 + 제목·개선 목적·투표). 카드를 누르면 전체 내용. 투표(이유 필수), 최종 선택(★)
+//   실험완료    ★ 실험안을 Final 로 복제해 다듬고 '최종 확정'
+//   최종        모두 읽기 전용. '새 버전으로 사본 생성'만 가능
+//
+// 버전·실험안을 삭제하면 번호를 다시 매긴다 (V1 삭제 → V2 가 V1, 실험 B 삭제 → C 가 B).
 (function () {
   "use strict";
 
@@ -23,11 +26,13 @@
   const TITLE_MAX = 100;
   const EXP_PURPOSE_MAX = 500;
   const VOTE_REASON_MAX = 500;
+  const DELETE_PHRASE = "Delete This Version"; // 삭제 확인 창에 직접 입력해야 하는 문구
   const IMAGE_EXT_RE = /\.(png|jpe?g)$/i;
   const IMAGE_TYPES = ["image/png", "image/jpeg"];
 
   const STATUSES = [
-    { key: "draft", label: "실험전" },
+    { key: "design", label: "실험 설계" },
+    { key: "draft", label: "실험안 작성" },
     { key: "testing", label: "실험중" },
     { key: "done", label: "실험완료" },
     { key: "final", label: "최종" },
@@ -52,6 +57,14 @@
     };
   }
   const makeFinal = (e) => ({ ...copyExp(e, FINAL), source: e.letter });
+  const emptyDesign = () => ({ file: null, title: "", purpose: "", body: "" });
+  const copyDesign = (d) => ({ ...d, file: d.file ? { ...d.file } : null });
+
+  function fileSize(bytes) {
+    if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
+    if (bytes >= 1024) return Math.round(bytes / 1024) + " KB";
+    return bytes + " B";
+  }
 
   // ---------- 샘플 데이터 ----------
   function sampleImage(hue, text) {
@@ -94,31 +107,42 @@
     v1final.title = `[샘플] ${tabLabel} V1 최종본`;
     v1final.purpose = "[샘플] V1-A를 바탕으로 문구를 다듬은 최종본입니다.";
 
+    const sampleText = `[샘플] ${tabLabel} 실험 설계안 파일입니다.`;
+    const sampleFile = {
+      name: `[샘플] ${tabLabel} 실험 설계안.txt`,
+      size: new Blob([sampleText]).size,
+      url: "data:text/plain;charset=utf-8," + encodeURIComponent(sampleText),
+    };
+
     return [
       {
         no: 1,
-        title: `[샘플] ${tabLabel} 기본 프롬프트`,
         status: "final",
         createdAt: "2026-10-02",
         updatedAt: "2026-10-15",
         confirmedAt: "2026-10-15",
-        purpose: `[샘플] ${tabLabel} 첫 버전입니다.`,
-        format: `[샘플] ${tabLabel} V1 프롬프트 형식\n\n- 역할:\n- 입력:\n- 출력 형식:`,
-        example: `[샘플] ${tabLabel} V1 프롬프트 예시 전문이 여기에 들어갑니다.`,
+        design: {
+          file: null,
+          title: `[샘플] ${tabLabel} 기본 프롬프트`,
+          purpose: `[샘플] ${tabLabel} 첫 버전입니다. 기준이 될 프롬프트를 정합니다.`,
+          body: `[샘플] 실험 설계 본문\n\n1. 배경\n2. 가설\n3. 실험 방법\n4. 평가 기준`,
+        },
         experiments: [v1a, v1b],
         finalLetter: "A",
         final: v1final,
       },
       {
         no: 2,
-        title: `[샘플] ${tabLabel} 출력 형식 개선`,
         status: "testing",
         createdAt: "2026-11-03",
         updatedAt: "2026-11-24",
         confirmedAt: null,
-        purpose: `[샘플] V1 최종본을 바탕으로 출력 형식을 다듬은 버전입니다.`,
-        format: `[샘플] ${tabLabel} V2 프롬프트 형식\n\n- 역할:\n- 입력:\n- 제약 조건:\n- 출력 형식:`,
-        example: `[샘플] ${tabLabel} V2 프롬프트 예시 전문이 여기에 들어갑니다.`,
+        design: {
+          file: sampleFile,
+          title: `[샘플] ${tabLabel} 출력 형식 개선`,
+          purpose: `[샘플] V1 최종본을 바탕으로 출력 형식을 다듬습니다.`,
+          body: `[샘플] 실험 설계 본문\n\n1. 배경: V1 결과물의 출력 형식이 일정하지 않음\n2. 가설: 제약 조건을 명시하면 형식이 안정된다\n3. 실험 방법: 실험안 3개(A~C)를 같은 입력으로 비교\n4. 평가 기준: 형식 준수, 이미지 품질`,
+        },
         experiments: [
           sampleExperiment(tabLabel, 2, "A", hue + 20, 4, [sampleVote(0, "구도가 안정적입니다.", "2026-11-20")]),
           sampleExperiment(tabLabel, 2, "B", hue + 90, 2, [
@@ -137,7 +161,7 @@
   const state = Object.fromEntries(TABS.map((t, i) => [t.key, { versions: seed(t.label, 140 + i * 70), selected: null, exp: null }]));
 
   // ---------- 화면 ----------
-  // { container, tab, canEdit, user, openModal, imgError, statusError, voteDraft }
+  // { container, tab, canEdit, user, openModal, closeModal, imgError, statusError, voteDraft, hero }
   let ctx = null;
 
   const tabState = () => state[ctx.tab];
@@ -151,7 +175,7 @@
   // 상태별 권한 (Viewer 는 투표만 가능)
   const status = () => currentVersion().status;
   const can = {
-    editVersion: () => ctx.canEdit && status() !== "final",
+    editDesign: () => ctx.canEdit && status() === "design",
     editExp: () => ctx.canEdit && (status() === "draft" || status() === "testing"),
     editFinal: () => ctx.canEdit && status() === "done",
     addExp: () => ctx.canEdit && status() === "draft",
@@ -174,10 +198,12 @@
     render();
   }
 
-  function field({ label, key, value, exp, rows = 3, max, single, editable }) {
+  function field({ label, key, value, exp, design, rows = 3, max, single, editable, placeholder }) {
     const attrs = [
       `data-field="${key}"`,
       exp ? `data-exp="${exp}"` : "",
+      design ? "data-design" : "",
+      placeholder && editable ? `placeholder="${esc(placeholder)}"` : "",
       max ? `maxlength="${max}"` : "",
       editable ? "" : "readonly",
     ].join(" ");
@@ -191,8 +217,10 @@
   function statusHint(v) {
     const id = `V${v.no}`;
     switch (v.status) {
+      case "design":
+        return "실험 설계안을 작성합니다. 파일 첨부는 선택입니다. 다 쓰면 실험안 작성 단계로 넘깁니다.";
       case "draft":
-        return "실험안(A~J)을 만들고 내용을 채웁니다. 실험안은 이 상태에서만 추가·삭제할 수 있습니다.";
+        return "실험안(A~J)을 만들고 내용을 채웁니다. 실험안은 이 단계에서만 추가·삭제할 수 있습니다.";
       case "testing":
         return "실험안마다 투표하고 이유를 남깁니다. 여러 실험안에 투표할 수 있습니다. 카드를 누르면 프롬프트까지 전체 내용이 보이고, 거기서 하나를 최종 선택한 뒤 실험완료로 넘깁니다.";
       case "done":
@@ -219,6 +247,50 @@
       </div>
       <p class="status-hint">${esc(statusHint(v))}</p>
       ${ctx.statusError ? `<p class="field__error status-error">${esc(ctx.statusError)}</p>` : ""}`;
+  }
+
+  // 실험 설계: 실험 설계 단계에서는 입력 폼, 그 뒤 단계에서는 접힌 읽기 전용 요약
+  function designFile(d, editable) {
+    if (d.file)
+      return `<div class="file-chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>
+          <a href="${esc(d.file.url)}" download="${esc(d.file.name)}">${esc(d.file.name)}</a>
+          <span class="file-chip__size">${fileSize(d.file.size)}</span>
+          ${editable ? `<button type="button" class="file-chip__remove" data-action="remove-design-file" aria-label="파일 삭제">×</button>` : ""}
+        </div>`;
+    if (!editable) return `<p class="muted-sm">첨부된 파일이 없습니다.</p>`;
+    return `<label class="file-pick">
+        <input type="file" hidden data-action="add-design-file" />
+        <span class="btn btn--outline btn--sm">파일 선택</span>
+        <span class="muted-sm">파일 1개를 첨부할 수 있습니다.</span>
+      </label>`;
+  }
+
+  function designBlock(v) {
+    const d = v.design;
+    if (v.status === "design") {
+      const editable = can.editDesign();
+      return `
+        <div class="design">
+          <div class="vfield">
+            <span class="vfield__label"><span>실험 설계안 파일 <span class="optional">(선택)</span></span></span>
+            ${designFile(d, editable)}
+          </div>
+          ${field({ label: "제목", key: "title", value: d.title, design: true, max: TITLE_MAX, single: true, editable })}
+          ${field({ label: "개선 목적", key: "purpose", value: d.purpose, design: true, rows: 3, editable })}
+          ${field({ label: "본문", key: "body", value: d.body, design: true, rows: 12, editable })}
+        </div>`;
+    }
+    const text = (t) => (t ? esc(t) : `<span class="gcard__empty">내용이 없습니다.</span>`);
+    return `
+      <details class="design-summary">
+        <summary><span class="design-summary__label">실험 설계</span><span class="design-summary__title">${d.title ? esc(d.title) : "제목 없음"}</span></summary>
+        <dl class="design-summary__body">
+          <dt>실험 설계안 파일</dt><dd>${designFile(d, false)}</dd>
+          <dt>개선 목적</dt><dd>${text(d.purpose)}</dd>
+          <dt>본문</dt><dd>${text(d.body)}</dd>
+        </dl>
+      </details>`;
   }
 
   function voteSection(e, compact) {
@@ -371,7 +443,7 @@
   }
 
   function voteSummary(v) {
-    if (v.status === "draft") return "";
+    if (v.status === "design" || v.status === "draft") return "";
     const ranked = v.experiments.filter((e) => e.votes.length).sort((a, b) => b.votes.length - a.votes.length);
     const top = ranked.length ? ranked[0].votes.length : 0;
     const chips = ranked
@@ -382,6 +454,25 @@
 
   function render() {
     const { versions } = tabState();
+    const tabsHtml = `
+      <div class="tabs" role="tablist">
+        ${TABS.map(
+          (t) => `<a class="tab${t.key === ctx.tab ? " is-active" : ""}" role="tab" href="#/image/${t.key}" aria-selected="${t.key === ctx.tab}">${t.label}</a>`
+        ).join("")}
+      </div>`;
+
+    // 버전을 모두 지운 경우
+    if (!versions.length) {
+      ctx.container.innerHTML = `${tabsHtml}
+        <section class="panel">
+          <div class="empty-state">
+            <p>버전이 없습니다.</p>
+            ${ctx.canEdit ? `<button type="button" class="btn btn--primary btn--sm" data-action="new-version">＋ 새 버전 추가</button>` : ""}
+          </div>
+        </section>`;
+      return;
+    }
+
     const idx = currentIndex();
     const v = versions[idx];
     const latest = versions.length - 1;
@@ -413,19 +504,17 @@
         .map((e) => `<option value="${e.letter}" ${e.letter === filter ? "selected" : ""}>${esc(expOptionLabel(v, e))}</option>`)
         .join("");
 
-    let headAction = "";
-    if (ctx.canEdit && v.status === "final")
-      headAction = `<button type="button" class="btn btn--primary btn--sm" data-action="copy-version">새 버전으로 사본 생성</button>`;
+    const headAction = ctx.canEdit
+      ? `<div class="version-actions">
+           ${v.status === "final" ? `<button type="button" class="btn btn--primary btn--sm" data-action="copy-version">새 버전으로 사본 생성</button>` : ""}
+           <button type="button" class="btn btn--danger-outline btn--sm" data-action="delete-version">버전 삭제</button>
+         </div>`
+      : "";
+    // 실험 설계 단계에서는 실험안이 이미 있을 때만(뒤 단계에서 돌아온 경우) 실험 과정을 읽기 전용으로 보여준다
+    const showExpSection = v.status !== "design" || n > 0;
+    const emptyText = v.status === "draft" && ctx.canEdit ? "아직 실험안이 없습니다. '+ 실험 추가'로 실험안을 만들어 주세요." : "실험이 없습니다.";
 
-    const editVersion = can.editVersion();
-    const emptyText = v.status === "draft" && ctx.canEdit ? "아직 실험이 없습니다. '+ 실험 추가'로 실험안을 만들어 주세요." : "실험이 없습니다.";
-
-    ctx.container.innerHTML = `
-      <div class="tabs" role="tablist">
-        ${TABS.map(
-          (t) => `<a class="tab${t.key === ctx.tab ? " is-active" : ""}" role="tab" href="#/image/${t.key}" aria-selected="${t.key === ctx.tab}">${t.label}</a>`
-        ).join("")}
-      </div>
+    ctx.container.innerHTML = `${tabsHtml}
 
       <section class="panel${v.status === "final" ? " is-final-version" : ""}">
         <div class="version-head">
@@ -448,13 +537,10 @@
           ${headAction}
         </div>
         ${statusRow(v)}
-        ${field({ label: "제목", key: "title", value: v.title, max: TITLE_MAX, single: true, editable: editVersion })}
-        ${field({ label: "개선 목적", key: "purpose", value: v.purpose, rows: 2, editable: editVersion })}
-        ${field({ label: "프롬프트 형식", key: "format", value: v.format, rows: 8, editable: editVersion })}
-        ${field({ label: "프롬프트 예시", key: "example", value: v.example, rows: 8, editable: editVersion })}
+        ${designBlock(v)}
       </section>
 
-      <section class="exp-section">
+      <section class="exp-section" ${showExpSection ? "" : "hidden"}>
         <div class="exp-section__head">
           <h2>실험 과정 <span class="counter">${n}/${LETTERS.length}</span></h2>
           <div class="exp-section__actions">
@@ -492,8 +578,8 @@
   function addVersion(fields) {
     const versions = tabState().versions;
     versions.push({
-      no: Math.max(...versions.map((x) => x.no)) + 1,
-      status: "draft",
+      no: versions.length + 1,
+      status: "design",
       createdAt: today(),
       updatedAt: today(),
       confirmedAt: null,
@@ -507,24 +593,22 @@
     ctx.hero = {};
     render();
     window.scrollTo(0, 0);
-    ctx.container.querySelector('[data-field="title"]:not([data-exp])').focus({ preventScroll: true });
+    const title = ctx.container.querySelector('[data-design][data-field="title"]');
+    if (title) title.focus({ preventScroll: true });
   }
 
   // 버전 드롭다운 맨 위 "새 버전 추가"
   function newVersion() {
     if (!ctx.canEdit) return render();
-    const v = currentVersion();
-    addVersion({ title: "", purpose: "", format: v.format, example: v.example, experiments: [] });
+    addVersion({ design: emptyDesign(), experiments: [] });
   }
 
-  // 실험 드롭다운 맨 위 "새 실험안 추가" 와 실험 과정의 "+ 실험 추가" (실험전에서만)
+  // 실험 드롭다운 맨 위 "새 실험안 추가" 와 실험 과정의 "+ 실험 추가" (실험안 작성 단계에서만)
   function addExperiment() {
     const v = currentVersion();
-    const used = new Set(v.experiments.map((x) => x.letter));
-    const next = LETTERS.find((l) => !used.has(l));
+    const next = LETTERS[v.experiments.length]; // 실험안은 항상 A 부터 빈틈없이 이어진다
     if (!can.addExp() || !next) return render();
-    v.experiments.push({ letter: next, title: "", purpose: "", format: v.format, example: v.example, images: [], votes: [] });
-    v.experiments.sort((a, b) => a.letter.localeCompare(b.letter));
+    v.experiments.push({ letter: next, title: "", purpose: "", format: "", example: "", images: [], votes: [] });
     tabState().exp = null; // 새 실험이 보이도록 전체 보기로 돌린다
     touch();
     render();
@@ -536,7 +620,7 @@
   function setStatus(v, next) {
     if (!ctx.canEdit || v.status === "final" || next === "final" || next === v.status) return;
     if (next === "testing" && !v.experiments.length) {
-      ctx.statusError = "실험안이 없습니다. 실험전 상태에서 실험안을 먼저 만들어 주세요.";
+      ctx.statusError = "실험안이 없습니다. 실험안 작성 단계에서 실험안을 먼저 만들어 주세요.";
       return render();
     }
     if (next === "done") {
@@ -561,6 +645,70 @@
     render();
   }
 
+  // ---------- 삭제 (확인 문구 입력 + 번호 다시 매기기) ----------
+  const deleteModal = document.getElementById("delete-modal");
+  const deleteInput = document.getElementById("delete-input");
+  const deleteConfirm = document.getElementById("delete-confirm");
+  let pendingDelete = null;
+
+  // kind: "버전" | "실험안"
+  function askDelete(kind, target, note, onConfirm) {
+    document.getElementById("delete-title").textContent = `정말 이 ${kind}을 삭제하시겠습니까?`;
+    document.getElementById("delete-target").textContent = target;
+    document.getElementById("delete-note").textContent = note;
+    deleteInput.value = "";
+    deleteConfirm.disabled = true;
+    pendingDelete = onConfirm;
+    ctx.openModal(deleteModal);
+  }
+
+  deleteInput.addEventListener("input", () => {
+    deleteConfirm.disabled = deleteInput.value.trim() !== DELETE_PHRASE;
+  });
+  deleteInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !deleteConfirm.disabled) deleteConfirm.click();
+  });
+  deleteConfirm.addEventListener("click", () => {
+    if (deleteInput.value.trim() !== DELETE_PHRASE || !pendingDelete) return;
+    const run = pendingDelete;
+    pendingDelete = null;
+    ctx.closeModal(deleteModal);
+    run();
+  });
+
+  // 버전을 지우고 남은 버전을 V1 부터 다시 매긴다
+  function deleteVersion(v) {
+    const ts = tabState();
+    ts.versions = ts.versions.filter((x) => x !== v);
+    ts.versions.forEach((x, i) => (x.no = i + 1));
+    ts.selected = null;
+    ts.exp = null;
+    ctx.voteDraft = null;
+    ctx.hero = {};
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  // 실험안을 지우고 남은 실험안을 A 부터 다시 매긴다. 최종 선택(★)과 Final 의 원본 표시도 따라 옮긴다.
+  function deleteExperiment(v, letter) {
+    v.experiments = v.experiments.filter((x) => x.letter !== letter);
+    const moved = {};
+    v.experiments.forEach((x, i) => {
+      moved[x.letter] = LETTERS[i];
+      x.letter = LETTERS[i];
+    });
+    v.finalLetter = moved[v.finalLetter] ?? null;
+    if (v.final) {
+      if (moved[v.final.source]) v.final.source = moved[v.final.source];
+      else v.final = null; // 원본 실험안이 지워졌으면 Final 도 지운다
+    }
+    tabState().exp = null;
+    ctx.voteDraft = null;
+    ctx.hero = {};
+    touch();
+    render();
+  }
+
   // ---------- 동작 ----------
   function bind(container) {
     container.addEventListener("input", (e) => {
@@ -571,7 +719,7 @@
       }
       const key = el.dataset.field;
       if (!key || el.readOnly) return;
-      const target = el.dataset.exp ? findExp(el.dataset.exp) : currentVersion();
+      const target = el.dataset.exp ? findExp(el.dataset.exp) : currentVersion().design;
       target[key] = el.value;
       touch();
       const counter = el.closest(".vfield").querySelector(".counter");
@@ -607,6 +755,12 @@
         render();
       } else if (el.dataset.action === "add-img") {
         addImages(el.dataset.exp, [...el.files]);
+      } else if (el.dataset.action === "add-design-file") {
+        const f = el.files[0];
+        if (!f || !can.editDesign()) return;
+        currentVersion().design.file = { name: f.name, size: f.size, url: URL.createObjectURL(f) };
+        touch();
+        render();
       }
     });
 
@@ -619,6 +773,24 @@
       const letter = el.dataset.exp;
 
       switch (el.dataset.action) {
+        case "new-version":
+          newVersion();
+          break;
+        case "delete-version":
+          if (!ctx.canEdit || !v) return;
+          askDelete(
+            "버전",
+            `V${v.no}${v.design.title ? ` · ${v.design.title}` : ""}`,
+            "삭제하면 실험 설계와 실험안, 투표가 모두 지워지고, 뒤 버전 번호가 하나씩 앞당겨집니다.",
+            () => deleteVersion(v)
+          );
+          break;
+        case "remove-design-file":
+          if (!can.editDesign()) return;
+          v.design.file = null;
+          touch();
+          render();
+          break;
         case "open-exp":
           tabState().exp = letter;
           render();
@@ -629,15 +801,9 @@
           render();
           break;
         case "copy-version":
-          // 최종 버전의 내용을 그대로 복제해 실험전 상태의 새 버전을 만든다 (투표·최종 선택·Final 은 넘기지 않는다)
+          // 최종 버전의 실험 설계와 실험안을 그대로 복제해 실험안 작성 단계의 새 버전을 만든다 (투표·최종 선택·Final 은 넘기지 않는다)
           if (!ctx.canEdit || v.status !== "final") return;
-          addVersion({
-            title: v.title,
-            purpose: v.purpose,
-            format: v.format,
-            example: v.example,
-            experiments: v.experiments.map((x) => copyExp(x)),
-          });
+          addVersion({ status: "draft", design: copyDesign(v.design), experiments: v.experiments.map((x) => copyExp(x)) });
           break;
         case "set-status":
           setStatus(v, el.dataset.status);
@@ -665,12 +831,13 @@
           break;
         case "delete-exp": {
           if (!can.addExp()) return;
-          if (!window.confirm(`V${v.no}-${letter} 실험을 삭제할까요?`)) return;
-          v.experiments = v.experiments.filter((x) => x.letter !== letter);
-          if (v.finalLetter === letter) v.finalLetter = null;
-          if (tabState().exp === letter) tabState().exp = null;
-          touch();
-          render();
+          const exp = findExp(letter);
+          askDelete(
+            "실험안",
+            `V${v.no}-${letter}${exp.title ? ` · ${exp.title}` : ""}`,
+            "삭제하면 이 실험안의 내용과 이미지가 지워지고, 뒤 실험안 이름이 하나씩 앞당겨집니다.",
+            () => deleteExperiment(v, letter)
+          );
           break;
         }
         case "remove-img":
