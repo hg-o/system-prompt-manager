@@ -942,6 +942,7 @@ body.is-app .bg-blob { display: none; }
 .btn--sm.btn--danger-outline { gap: 6px; white-space: nowrap; }
 .vpick { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .vpick__label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.exp-section__head { min-height: 38px; }
 .vpick__row { display: flex; align-items: center; gap: 10px; }
 .delete-actions { display: flex; gap: 8px; margin-top: 18px; }
 .delete-actions .btn { flex: 1; height: 46px; }

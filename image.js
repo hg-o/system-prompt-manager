@@ -3,10 +3,10 @@
 // 데이터는 메모리에만 있다. 새로고침하면 샘플 데이터로 돌아간다.
 // 실제 구현에서는 아래 state 구조를 API 로 읽고 쓰면 된다 (HANDOFF.md 참고).
 //
-// 버전 상태 흐름: 실험 설계(design) → 실험안 작성(draft) → 실험중(testing) → 실험완료(done) → 최종(final)
+// 버전 상태 흐름: 실험 설계(design) → 실험안 작성(draft) → 의견수렴중(testing) → 실험완료(done) → 최종(final)
 //   실험 설계   실험 설계안 작성 (파일(선택)·제목·개선 목적·본문)
 //   실험안 작성 실험안(A~J) 추가·삭제·작성
-//   실험중      갤러리 카드 보기(이미지 크게 + 제목·개선 목적·투표). 카드를 누르면 전체 내용. 투표(이유 필수), 최종 선택(★)
+//   의견수렴중      갤러리 카드 보기(이미지 크게 + 제목·개선 목적·투표). 카드를 누르면 전체 내용. 투표(이유 필수), 최종 선택(★)
 //   실험완료    ★ 실험안을 Final 로 복제해 다듬고 '최종 확정'
 //   최종        모두 읽기 전용. '새 버전으로 사본 생성'만 가능
 //
@@ -21,7 +21,7 @@
   ];
   const LETTERS = "ABCDEFGHIJ".split(""); // 한 버전당 실험 최대 10개 (A~J)
   const FINAL = "Final"; // 실험완료 때 만드는 최종본의 이름 (Vn-Final)
-  const NEW = "__new"; // 드롭다운 맨 위 "새 버전 추가" / "새 실험안 추가" 항목의 값
+  const NEW = "__new"; // 버전 드롭다운 맨 위 "새 버전 추가" 항목의 값
   const MAX_IMAGES = 10;
   const TITLE_MAX = 100;
   const EXP_PURPOSE_MAX = 500;
@@ -33,7 +33,7 @@
   const STATUSES = [
     { key: "design", label: "실험 설계" },
     { key: "draft", label: "실험안 작성" },
-    { key: "testing", label: "실험중" },
+    { key: "testing", label: "의견수렴중" },
     { key: "done", label: "실험완료" },
     { key: "final", label: "최종" },
   ];
@@ -169,8 +169,6 @@
   const currentVersion = () => tabState().versions[currentIndex()];
   const findExp = (letter) =>
     letter === FINAL ? currentVersion().final : currentVersion().experiments.find((e) => e.letter === letter);
-  const expOptionLabel = (v, e) =>
-    `V${v.no}-${e.letter}${v.finalLetter === e.letter ? " ★" : ""}${e.title ? ` · ${e.title}` : ""}`;
 
   // 상태별 권한 (Viewer 는 투표만 가능)
   const status = () => currentVersion().status;
@@ -226,7 +224,7 @@
       case "testing":
         return "실험안마다 투표하고 이유를 남깁니다. 여러 실험안에 투표할 수 있습니다. 카드를 누르면 프롬프트까지 전체 내용이 보이고, 거기서 하나를 최종 선택한 뒤 실험완료로 넘깁니다.";
       case "done":
-        return `${id}-${v.final.source}을(를) 복제한 ${id}-Final을 다듬은 뒤 '최종 확정'을 누릅니다. 실험안 A~J는 고칠 수 없습니다.`;
+        return `최종 선택된 ${id}-${v.final.source}을(를) 복제한 ${id}-Final만 다룹니다. 다듬은 뒤 '최종 확정'을 누릅니다.`;
       default:
         return `최종 확정된 버전이라 고칠 수 없습니다. 고치려면 '새 버전으로 사본 생성'을 눌러 새 버전에서 고쳐 주세요.`;
     }
@@ -405,7 +403,7 @@
       </article>`;
   }
 
-  // 실험중 갤러리 카드: 이미지를 가장 크게, 그 아래 제목·개선 목적·투표. 카드를 누르면 전체 내용이 열린다.
+  // 의견수렴중 갤러리 카드: 이미지를 가장 크게, 그 아래 제목·개선 목적·투표. 카드를 누르면 전체 내용이 열린다.
   function galleryCard(v, e) {
     const id = `V${v.no}-${e.letter}`;
     const isPicked = v.finalLetter === e.letter;
@@ -443,7 +441,7 @@
   }
 
   function voteSummary(v) {
-    if (v.status === "design" || v.status === "draft") return "";
+    if (v.status !== "testing") return "";
     const ranked = v.experiments.filter((e) => e.votes.length).sort((a, b) => b.votes.length - a.votes.length);
     const top = ranked.length ? ranked[0].votes.length : 0;
     const chips = ranked
@@ -487,25 +485,17 @@
       .join("");
     const addVersionOption = ctx.canEdit ? `<option value="${NEW}">＋ 새 버전 추가</option>` : "";
 
-    // 실험 드롭다운: 선택한 버전의 실험만 나온다. 실험완료·최종이면 Final 도 나온다. "전체 실험"이면 모든 카드를 보여준다.
-    const showFinal = (v.status === "done" || v.status === "final") && v.final;
-    // 실험 설계 단계는 실험안 작성 전이라 실험 과정이 없다 (뒤 단계에서 돌아와 실험안이 남아 있어도 보여주지 않는다)
+    // 단계별로 보여주는 실험안
+    //   실험 설계        없음 (실험안 작성 전 단계. 뒤 단계에서 돌아와 실험안이 남아 있어도 보여주지 않는다)
+    //   실험안 작성·의견수렴중  전체 실험(갤러리 카드) ↔ 카드를 눌러 들어간 실험안 하나
+    //   실험완료·최종    Vn-Final 하나만 (A~J 는 데이터에 남지만 보여주지 않는다)
     const inDesign = v.status === "design";
-    const cards = inDesign ? [] : [...(showFinal ? [v.final] : []), ...v.experiments];
-    const filter = cards.some((e) => e.letter === tabState().exp) ? tabState().exp : null;
+    const finalOnly = v.status === "done" || v.status === "final";
+    const cards = inDesign ? [] : finalOnly ? [v.final].filter(Boolean) : v.experiments;
+    const filter = !finalOnly && cards.some((e) => e.letter === tabState().exp) ? tabState().exp : null;
     const shown = filter ? cards.filter((e) => e.letter === filter) : cards;
-    const full = n >= LETTERS.length;
-    const addExpOption = can.addExp()
-      ? `<option value="${NEW}" ${full ? "disabled" : ""}>＋ 새 실험안 추가${full ? " (최대 10개)" : ""}</option>`
-      : "";
-    // 실험안 작성·실험중의 전체 보기 = 갤러리 카드 (실험안 작성에서는 투표 기능만 뺀다)
-    const gallery = (v.status === "draft" || v.status === "testing") && !filter;
-    const expOptions =
-      addExpOption +
-      `<option value="" ${filter ? "" : "selected"}>${cards.length ? `전체 실험 (${cards.length})` : "실험 없음"}</option>` +
-      cards
-        .map((e) => `<option value="${e.letter}" ${e.letter === filter ? "selected" : ""}>${esc(expOptionLabel(v, e))}</option>`)
-        .join("");
+    // 전체 보기 = 갤러리 카드 (실험안 작성에서는 투표 기능만 뺀다)
+    const gallery = !finalOnly && !filter;
 
     const headAction = ctx.canEdit
       ? `<div class="version-actions">
@@ -530,13 +520,6 @@
                 <span class="status-pill status-pill--${v.status}">${statusLabel(v.status)}</span>
               </div>
             </div>
-            <div class="vpick" ${inDesign ? "hidden" : ""}>
-              <span class="vpick__label">V${v.no}의 실험안</span>
-              <div class="select-wrap exp-select">
-                <select class="input select" data-action="select-exp" aria-label="V${v.no} 실험안 선택" ${cards.length || addExpOption ? "" : "disabled"}>${expOptions}</select>
-                ${CHEVRON}
-              </div>
-            </div>
             <dl class="version-dates">
               <div><dt>버전 생성일</dt><dd>${v.createdAt}</dd></div>
               <div><dt>최종 수정일</dt><dd data-updated>${v.updatedAt}</dd></div>
@@ -551,9 +534,9 @@
 
       <section class="exp-section" ${inDesign ? "hidden" : ""}>
         <div class="exp-section__head">
-          <h2>실험 과정 <span class="counter">${n}/${LETTERS.length}</span></h2>
+          <h2>${finalOnly ? "최종안" : `실험 과정 <span class="counter">${n}/${LETTERS.length}</span>`}</h2>
           <div class="exp-section__actions">
-            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">${v.status === "draft" || v.status === "testing" ? "← 전체 실험으로 돌아가기" : "전체 실험 보기"}</button>` : ""}
+            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">← 전체 실험으로 돌아가기</button>` : ""}
             ${
               can.addExp()
                 ? `<button type="button" class="btn btn--outline btn--sm" data-action="add-exp" ${n >= LETTERS.length ? "disabled" : ""}>+ 실험 추가</button>`
@@ -612,7 +595,7 @@
     addVersion({ design: emptyDesign(), experiments: [] });
   }
 
-  // 실험 드롭다운 맨 위 "새 실험안 추가" 와 실험 과정의 "+ 실험 추가" (실험안 작성 단계에서만)
+  // 실험 과정의 "+ 실험 추가" (실험안 작성 단계에서만)
   function addExperiment() {
     const v = currentVersion();
     const next = LETTERS[v.experiments.length]; // 실험안은 항상 A 부터 빈틈없이 이어진다
@@ -635,7 +618,7 @@
     if (next === "done") {
       const picked = v.experiments.find((x) => x.letter === v.finalLetter);
       if (!picked) {
-        ctx.statusError = "최종 선택된 실험안이 없습니다. 실험중 상태에서 실험안 하나를 '최종 선택'해 주세요.";
+        ctx.statusError = "최종 선택된 실험안이 없습니다. 의견수렴중 상태에서 실험안 하나를 '최종 선택'해 주세요.";
         return render();
       }
       if (!v.final) v.final = makeFinal(picked);
@@ -762,11 +745,6 @@
       const counter = el.closest(".vfield").querySelector(".counter");
       if (counter && el.maxLength > 0) counter.textContent = `${el.value.length}/${el.maxLength}`;
       if (el.tagName === "TEXTAREA") autoGrow(el);
-      // 실험 제목을 고치면 실험 드롭다운 항목 이름도 바꾼다
-      if (el.dataset.exp && key === "title") {
-        const opt = ctx.container.querySelector(`[data-action="select-exp"] option[value="${el.dataset.exp}"]`);
-        if (opt) opt.textContent = expOptionLabel(currentVersion(), target);
-      }
     });
 
     // 갤러리 카드는 Enter·Space 로도 열 수 있다
@@ -785,10 +763,6 @@
         tabState().exp = null;
         ctx.voteDraft = null;
         ctx.hero = {};
-        render();
-      } else if (el.dataset.action === "select-exp") {
-        if (el.value === NEW) return addExperiment();
-        tabState().exp = el.value || null;
         render();
       } else if (el.dataset.action === "add-img") {
         addImages(el.dataset.exp, [...el.files]);
