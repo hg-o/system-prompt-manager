@@ -648,6 +648,9 @@ body.is-app .bg-blob { display: none; }
 }
 .version-select { width: 150px; }
 .version-select .select { height: 42px; font-size: 16px; font-weight: 700; }
+.exp-select { width: 260px; max-width: 100%; }
+.exp-select .select { height: 42px; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.exp-select .select:disabled { cursor: default; color: var(--muted); background-color: #f5f5f7; }
 .version-dates {
   display: flex;
   flex-direction: column;
@@ -690,6 +693,7 @@ body.is-app .bg-blob { display: none; }
   justify-content: space-between;
   margin-bottom: 14px;
 }
+.exp-section__actions { display: flex; gap: 8px; }
 .exp-section__head h2 {
   display: flex;
   align-items: baseline;

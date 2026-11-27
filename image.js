@@ -48,6 +48,7 @@
     return [
       {
         no: 1,
+        title: `[샘플] ${tabLabel} 기본 프롬프트`,
         createdAt: "2026-10-02",
         updatedAt: "2026-10-15",
         purpose: `[샘플] ${tabLabel} 첫 버전입니다.`,
@@ -58,6 +59,7 @@
       },
       {
         no: 2,
+        title: `[샘플] ${tabLabel} 출력 형식 개선`,
         createdAt: "2026-11-03",
         updatedAt: "2026-11-24",
         purpose: `[샘플] V1-A 결과를 바탕으로 출력 형식을 다듬은 버전입니다.`,
@@ -73,8 +75,8 @@
     ];
   }
 
-  // tabKey → { versions: [...], selected: 버전 index | null(최신) }
-  const state = Object.fromEntries(TABS.map((t, i) => [t.key, { versions: seed(t.label, 140 + i * 70), selected: null }]));
+  // tabKey → { versions: [...], selected: 버전 index | null(최신), exp: 보고 있는 실험 letter | null(전체) }
+  const state = Object.fromEntries(TABS.map((t, i) => [t.key, { versions: seed(t.label, 140 + i * 70), selected: null, exp: null }]));
 
   // ---------- 화면 ----------
   let ctx = null; // { container, tab, canEdit, openModal, imgError }
@@ -83,6 +85,13 @@
   const currentIndex = () => tabState().selected ?? tabState().versions.length - 1;
   const currentVersion = () => tabState().versions[currentIndex()];
   const findExp = (letter) => currentVersion().experiments.find((e) => e.letter === letter);
+  // 실험 드롭다운에서 고른 실험. 삭제됐거나 없으면 null(전체)
+  const currentExpFilter = () => (tabState().exp && findExp(tabState().exp) ? tabState().exp : null);
+  const expOptionLabel = (v, e) =>
+    `V${v.no}-${e.letter}${v.finalLetter === e.letter ? " ★" : ""}${e.title ? ` · ${e.title}` : ""}`;
+
+  const CHEVRON =
+    '<svg class="select-wrap__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>';
 
   function mount(container, options) {
     const first = !ctx || ctx.container !== container;
@@ -169,6 +178,15 @@
       .reverse()
       .join("");
 
+    // 실험 드롭다운: 선택한 버전의 A~J 실험만 나온다. "전체 실험"이면 모든 실험 카드를 보여준다.
+    const filter = currentExpFilter();
+    const shown = filter ? v.experiments.filter((e) => e.letter === filter) : v.experiments;
+    const expOptions =
+      `<option value="">${n ? `전체 실험 (${n})` : "실험 없음"}</option>` +
+      v.experiments
+        .map((e) => `<option value="${e.letter}" ${e.letter === filter ? "selected" : ""}>${esc(expOptionLabel(v, e))}</option>`)
+        .join("");
+
     ctx.container.innerHTML = `
       <div class="tabs" role="tablist">
         ${TABS.map(
@@ -181,7 +199,11 @@
           <div class="version-meta">
             <div class="select-wrap version-select">
               <select class="input select" data-action="select-version" aria-label="버전 선택">${options}</select>
-              <svg class="select-wrap__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+              ${CHEVRON}
+            </div>
+            <div class="select-wrap exp-select">
+              <select class="input select" data-action="select-exp" aria-label="V${v.no} 실험 선택" ${n ? "" : "disabled"}>${expOptions}</select>
+              ${CHEVRON}
             </div>
             <dl class="version-dates">
               <div><dt>버전 생성일</dt><dd>${v.createdAt}</dd></div>
@@ -190,6 +212,7 @@
           </div>
           ${ctx.canEdit ? `<button type="button" class="btn btn--primary btn--sm" data-action="new-version">+ New Version</button>` : ""}
         </div>
+        ${field({ label: "제목", key: "title", value: v.title, max: TITLE_MAX, single: true })}
         ${field({ label: "개선 목적", key: "purpose", value: v.purpose, rows: 2 })}
         ${field({ label: "프롬프트 형식", key: "format", value: v.format, rows: 8 })}
         ${field({ label: "프롬프트 예시", key: "example", value: v.example, rows: 8 })}
@@ -198,14 +221,17 @@
       <section class="exp-section">
         <div class="exp-section__head">
           <h2>실험 과정 <span class="counter">${n}/${LETTERS.length}</span></h2>
-          ${
-            ctx.canEdit
-              ? `<button type="button" class="btn btn--outline btn--sm" data-action="add-exp" ${n >= LETTERS.length ? "disabled" : ""}>+ 실험 추가</button>`
-              : ""
-          }
+          <div class="exp-section__actions">
+            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">전체 실험 보기</button>` : ""}
+            ${
+              ctx.canEdit
+                ? `<button type="button" class="btn btn--outline btn--sm" data-action="add-exp" ${n >= LETTERS.length ? "disabled" : ""}>+ 실험 추가</button>`
+                : ""
+            }
+          </div>
         </div>
         ${n === 0 ? `<div class="empty-state">아직 실험이 없습니다.</div>` : ""}
-        <div class="exp-list">${v.experiments.map((e) => experimentCard(v, e)).join("")}</div>
+        <div class="exp-list">${shown.map((e) => experimentCard(v, e)).join("")}</div>
       </section>`;
 
     ctx.imgError = null;
@@ -237,6 +263,11 @@
       const counter = el.closest(".vfield").querySelector(".counter");
       if (counter && el.maxLength > 0) counter.textContent = `${el.value.length}/${el.maxLength}`;
       if (el.tagName === "TEXTAREA") autoGrow(el);
+      // 실험 제목을 고치면 실험 드롭다운 항목 이름도 바꾼다
+      if (el.dataset.exp && key === "title") {
+        const opt = ctx.container.querySelector(`[data-action="select-exp"] option[value="${el.dataset.exp}"]`);
+        if (opt) opt.textContent = expOptionLabel(currentVersion(), target);
+      }
     });
 
     container.addEventListener("change", (e) => {
@@ -244,6 +275,10 @@
       if (el.dataset.action === "select-version") {
         const i = Number(el.value);
         tabState().selected = i === tabState().versions.length - 1 ? null : i;
+        tabState().exp = null;
+        render();
+      } else if (el.dataset.action === "select-exp") {
+        tabState().exp = el.value || null;
         render();
       } else if (el.dataset.action === "add-img") {
         addImages(el.dataset.exp, [...el.files]);
@@ -263,6 +298,7 @@
             no: Math.max(...versions.map((x) => x.no)) + 1,
             createdAt: today(),
             updatedAt: today(),
+            title: "",
             purpose: "",
             format: v.format,
             example: v.example,
@@ -270,16 +306,22 @@
             finalLetter: null,
           });
           tabState().selected = null;
+          tabState().exp = null;
           render();
-          ctx.container.querySelector('[data-field="purpose"]:not([data-exp])').focus();
+          ctx.container.querySelector('[data-field="title"]:not([data-exp])').focus();
           break;
         }
+        case "show-all-exp":
+          tabState().exp = null;
+          render();
+          break;
         case "add-exp": {
           const used = new Set(v.experiments.map((x) => x.letter));
           const next = LETTERS.find((l) => !used.has(l));
           if (!next) return;
           v.experiments.push({ letter: next, title: "", purpose: "", format: v.format, example: v.example, images: [] });
           v.experiments.sort((a, b) => a.letter.localeCompare(b.letter));
+          tabState().exp = null; // 새 실험이 보이도록 전체 보기로 돌린다
           touch();
           render();
           const card = ctx.container.querySelector(`[data-exp-card="${next}"]`);
@@ -298,6 +340,7 @@
           exp.images.forEach(revoke);
           v.experiments = v.experiments.filter((x) => x !== exp);
           if (v.finalLetter === letter) v.finalLetter = null;
+          if (tabState().exp === letter) tabState().exp = null;
           touch();
           render();
           break;
