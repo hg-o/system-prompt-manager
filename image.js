@@ -5,7 +5,7 @@
 //
 // 버전 상태 흐름: 실험전(draft) → 실험중(testing) → 실험완료(done) → 최종(final)
 //   실험전   실험안(A~J) 추가·삭제
-//   실험중   실험안 투표(이유 필수, 한 사람이 여러 실험안에 투표 가능), 최종 선택(★)
+//   실험중   갤러리 카드 보기(이미지 크게 + 제목·개선 목적·투표). 카드를 누르면 전체 내용. 투표(이유 필수), 최종 선택(★)
 //   실험완료 ★ 실험안을 Final 로 복제해 다듬고 '최종 확정'
 //   최종     모두 읽기 전용. '새 버전으로 사본 생성'만 가능
 (function () {
@@ -18,6 +18,7 @@
   ];
   const LETTERS = "ABCDEFGHIJ".split(""); // 한 버전당 실험 최대 10개 (A~J)
   const FINAL = "Final"; // 실험완료 때 만드는 최종본의 이름 (Vn-Final)
+  const NEW = "__new"; // 드롭다운 맨 위 "새 버전 추가" / "새 실험안 추가" 항목의 값
   const MAX_IMAGES = 10;
   const TITLE_MAX = 100;
   const EXP_PURPOSE_MAX = 500;
@@ -164,8 +165,11 @@
 
   function mount(container, options) {
     const first = !ctx || ctx.container !== container;
-    if (ctx && ctx.tab !== options.tab) ctx.voteDraft = null;
-    ctx = { imgError: null, statusError: null, voteDraft: null, ...ctx, ...options, container };
+    if (ctx && ctx.tab !== options.tab) {
+      ctx.voteDraft = null;
+      ctx.hero = {};
+    }
+    ctx = { imgError: null, statusError: null, voteDraft: null, hero: {}, ...ctx, ...options, container };
     if (first) bind(container);
     render();
   }
@@ -190,7 +194,7 @@
       case "draft":
         return "실험안(A~J)을 만들고 내용을 채웁니다. 실험안은 이 상태에서만 추가·삭제할 수 있습니다.";
       case "testing":
-        return "실험안마다 투표하고 이유를 남깁니다. 여러 실험안에 투표할 수 있습니다. 결과를 보고 하나를 최종 선택한 뒤 실험완료로 넘깁니다.";
+        return "실험안마다 투표하고 이유를 남깁니다. 여러 실험안에 투표할 수 있습니다. 카드를 누르면 프롬프트까지 전체 내용이 보이고, 거기서 하나를 최종 선택한 뒤 실험완료로 넘깁니다.";
       case "done":
         return `${id}-${v.final.source}을(를) 복제한 ${id}-Final을 다듬은 뒤 '최종 확정'을 누릅니다. 실험안 A~J는 고칠 수 없습니다.`;
       default:
@@ -217,7 +221,7 @@
       ${ctx.statusError ? `<p class="field__error status-error">${esc(ctx.statusError)}</p>` : ""}`;
   }
 
-  function voteSection(e) {
+  function voteSection(e, compact) {
     const votes = e.votes || [];
     const canVote = can.vote();
     if (!votes.length && !canVote) return "";
@@ -239,7 +243,8 @@
            </div>
          </div>`
       : "";
-    const list = votes
+    // 갤러리 카드에서는 내 의견만 보여준다 (전체 의견은 카드를 눌러 들어가면 보인다)
+    const list = (compact ? votes.filter((x) => x === mine) : votes)
       .map(
         (x) => `<li class="vote-item${ctx.user && x.userId === ctx.user.id ? " is-mine" : ""}">
           <div class="vote-item__meta"><b>${esc(x.name)}</b>${ctx.user && x.userId === ctx.user.id ? `<span class="vote-item__me">나</span>` : ""}<span>${x.at}</span></div>
@@ -248,7 +253,7 @@
       .join("");
 
     return `
-      <div class="vote">
+      <div class="vote${compact ? " vote--compact" : ""}" data-no-open>
         <div class="vote__head">
           <span class="vote__count">투표 <b>${votes.length}</b></span>
           ${mine ? `<span class="vote__mine">투표함</span>` : ""}
@@ -328,6 +333,43 @@
       </article>`;
   }
 
+  // 실험중 갤러리 카드: 이미지를 가장 크게, 그 아래 제목·개선 목적·투표. 카드를 누르면 전체 내용이 열린다.
+  function galleryCard(v, e) {
+    const id = `V${v.no}-${e.letter}`;
+    const isPicked = v.finalLetter === e.letter;
+    const count = e.images.length;
+    const hi = Math.min(ctx.hero[e.letter] || 0, Math.max(count - 1, 0));
+    const hero = e.images[hi];
+    const strip =
+      count > 1
+        ? `<div class="gcard__strip" data-no-open>${e.images
+            .map(
+              (img, i) =>
+                `<button type="button" class="gcard__pick${i === hi ? " is-active" : ""}" data-action="hero-img" data-exp="${e.letter}" data-index="${i}" aria-label="이미지 ${i + 1} 보기"><img src="${esc(img.url)}" alt="" /></button>`
+            )
+            .join("")}</div>`
+        : "";
+
+    return `
+      <article class="gcard${isPicked ? " is-final" : ""}" data-exp-card="${e.letter}" data-action="open-exp" data-exp="${e.letter}" tabindex="0" aria-label="${id} 전체 내용 보기">
+        <div class="gcard__hero">
+          ${hero ? `<img src="${esc(hero.url)}" alt="${esc(hero.name)}" />` : `<span class="gcard__noimg">등록된 이미지가 없습니다</span>`}
+          <div class="gcard__tags">
+            <span class="exp__id">${id}</span>
+            ${isPicked ? `<span class="badge-final">★ 최종 선택</span>` : ""}
+          </div>
+          ${count > 1 ? `<span class="gcard__count">${hi + 1} / ${count}</span>` : ""}
+        </div>
+        ${strip}
+        <div class="gcard__body">
+          <h3 class="gcard__title">${e.title ? esc(e.title) : `<span class="gcard__empty">제목 없음</span>`}</h3>
+          <p class="gcard__purpose">${e.purpose ? esc(e.purpose) : `<span class="gcard__empty">개선 목적이 없습니다.</span>`}</p>
+          <span class="gcard__more">전체 내용 보기 ›</span>
+        </div>
+        ${voteSection(e, true)}
+      </article>`;
+  }
+
   function voteSummary(v) {
     if (v.status === "draft") return "";
     const ranked = v.experiments.filter((e) => e.votes.length).sort((a, b) => b.votes.length - a.votes.length);
@@ -352,14 +394,21 @@
       )
       .reverse()
       .join("");
+    const addVersionOption = ctx.canEdit ? `<option value="${NEW}">＋ 새 버전 추가</option>` : "";
 
     // 실험 드롭다운: 선택한 버전의 실험만 나온다. 실험완료·최종이면 Final 도 나온다. "전체 실험"이면 모든 카드를 보여준다.
     const showFinal = (v.status === "done" || v.status === "final") && v.final;
     const cards = [...(showFinal ? [v.final] : []), ...v.experiments];
     const filter = cards.some((e) => e.letter === tabState().exp) ? tabState().exp : null;
     const shown = filter ? cards.filter((e) => e.letter === filter) : cards;
+    const full = n >= LETTERS.length;
+    const addExpOption = can.addExp()
+      ? `<option value="${NEW}" ${full ? "disabled" : ""}>＋ 새 실험안 추가${full ? " (최대 10개)" : ""}</option>`
+      : "";
+    const gallery = v.status === "testing" && !filter; // 실험중 + 전체 보기 = 갤러리 카드
     const expOptions =
-      `<option value="">${cards.length ? `전체 실험 (${cards.length})` : "실험 없음"}</option>` +
+      addExpOption +
+      `<option value="" ${filter ? "" : "selected"}>${cards.length ? `전체 실험 (${cards.length})` : "실험 없음"}</option>` +
       cards
         .map((e) => `<option value="${e.letter}" ${e.letter === filter ? "selected" : ""}>${esc(expOptionLabel(v, e))}</option>`)
         .join("");
@@ -367,7 +416,6 @@
     let headAction = "";
     if (ctx.canEdit && v.status === "final")
       headAction = `<button type="button" class="btn btn--primary btn--sm" data-action="copy-version">새 버전으로 사본 생성</button>`;
-    else if (ctx.canEdit) headAction = `<button type="button" class="btn btn--primary btn--sm" data-action="new-version">+ New Version</button>`;
 
     const editVersion = can.editVersion();
     const emptyText = v.status === "draft" && ctx.canEdit ? "아직 실험이 없습니다. '+ 실험 추가'로 실험안을 만들어 주세요." : "실험이 없습니다.";
@@ -383,12 +431,12 @@
         <div class="version-head">
           <div class="version-meta">
             <div class="select-wrap version-select">
-              <select class="input select" data-action="select-version" aria-label="버전 선택">${options}</select>
+              <select class="input select" data-action="select-version" aria-label="버전 선택">${addVersionOption}${options}</select>
               ${CHEVRON}
             </div>
             <span class="status-pill status-pill--${v.status}">${statusLabel(v.status)}</span>
             <div class="select-wrap exp-select">
-              <select class="input select" data-action="select-exp" aria-label="V${v.no} 실험 선택" ${cards.length ? "" : "disabled"}>${expOptions}</select>
+              <select class="input select" data-action="select-exp" aria-label="V${v.no} 실험 선택" ${cards.length || addExpOption ? "" : "disabled"}>${expOptions}</select>
               ${CHEVRON}
             </div>
             <dl class="version-dates">
@@ -410,7 +458,7 @@
         <div class="exp-section__head">
           <h2>실험 과정 <span class="counter">${n}/${LETTERS.length}</span></h2>
           <div class="exp-section__actions">
-            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">전체 실험 보기</button>` : ""}
+            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">${v.status === "testing" ? "← 갤러리로 돌아가기" : "전체 실험 보기"}</button>` : ""}
             ${
               can.addExp()
                 ? `<button type="button" class="btn btn--outline btn--sm" data-action="add-exp" ${n >= LETTERS.length ? "disabled" : ""}>+ 실험 추가</button>`
@@ -420,7 +468,7 @@
         </div>
         ${voteSummary(v)}
         ${cards.length === 0 ? `<div class="empty-state">${emptyText}</div>` : ""}
-        <div class="exp-list">${shown.map((e) => experimentCard(v, e)).join("")}</div>
+        <div class="${gallery ? "exp-gallery" : "exp-list"}">${shown.map((e) => (gallery ? galleryCard(v, e) : experimentCard(v, e))).join("")}</div>
       </section>`;
 
     ctx.imgError = null;
@@ -456,9 +504,33 @@
     tabState().selected = null;
     tabState().exp = null;
     ctx.voteDraft = null;
+    ctx.hero = {};
     render();
     window.scrollTo(0, 0);
     ctx.container.querySelector('[data-field="title"]:not([data-exp])').focus({ preventScroll: true });
+  }
+
+  // 버전 드롭다운 맨 위 "새 버전 추가"
+  function newVersion() {
+    if (!ctx.canEdit) return render();
+    const v = currentVersion();
+    addVersion({ title: "", purpose: "", format: v.format, example: v.example, experiments: [] });
+  }
+
+  // 실험 드롭다운 맨 위 "새 실험안 추가" 와 실험 과정의 "+ 실험 추가" (실험전에서만)
+  function addExperiment() {
+    const v = currentVersion();
+    const used = new Set(v.experiments.map((x) => x.letter));
+    const next = LETTERS.find((l) => !used.has(l));
+    if (!can.addExp() || !next) return render();
+    v.experiments.push({ letter: next, title: "", purpose: "", format: v.format, example: v.example, images: [], votes: [] });
+    v.experiments.sort((a, b) => a.letter.localeCompare(b.letter));
+    tabState().exp = null; // 새 실험이 보이도록 전체 보기로 돌린다
+    touch();
+    render();
+    const card = ctx.container.querySelector(`[data-exp-card="${next}"]`);
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.querySelector('[data-field="title"]').focus({ preventScroll: true });
   }
 
   function setStatus(v, next) {
@@ -512,15 +584,25 @@
       }
     });
 
+    // 갤러리 카드는 Enter·Space 로도 열 수 있다
+    container.addEventListener("keydown", (e) => {
+      if ((e.key !== "Enter" && e.key !== " ") || !e.target.matches('[data-action="open-exp"]')) return;
+      e.preventDefault();
+      e.target.click();
+    });
+
     container.addEventListener("change", (e) => {
       const el = e.target;
       if (el.dataset.action === "select-version") {
+        if (el.value === NEW) return newVersion();
         const i = Number(el.value);
         tabState().selected = i === tabState().versions.length - 1 ? null : i;
         tabState().exp = null;
         ctx.voteDraft = null;
+        ctx.hero = {};
         render();
       } else if (el.dataset.action === "select-exp") {
+        if (el.value === NEW) return addExperiment();
         tabState().exp = el.value || null;
         render();
       } else if (el.dataset.action === "add-img") {
@@ -531,13 +613,20 @@
     container.addEventListener("click", (e) => {
       const el = e.target.closest("[data-action]");
       if (!el || el.tagName === "SELECT" || el.tagName === "INPUT") return;
+      // 갤러리 카드 안의 투표 영역·이미지 고르기는 카드 열기로 치지 않는다
+      if (el.dataset.action === "open-exp" && e.target.closest("[data-no-open]")) return;
       const v = currentVersion();
       const letter = el.dataset.exp;
 
       switch (el.dataset.action) {
-        case "new-version":
-          if (!ctx.canEdit) return;
-          addVersion({ title: "", purpose: "", format: v.format, example: v.example, experiments: [] });
+        case "open-exp":
+          tabState().exp = letter;
+          render();
+          ctx.container.querySelector(".exp-section").scrollIntoView({ block: "start" });
+          break;
+        case "hero-img":
+          ctx.hero[letter] = Number(el.dataset.index);
+          render();
           break;
         case "copy-version":
           // 최종 버전의 내용을 그대로 복제해 실험전 상태의 새 버전을 만든다 (투표·최종 선택·Final 은 넘기지 않는다)
@@ -565,21 +654,9 @@
           tabState().exp = null;
           render();
           break;
-        case "add-exp": {
-          if (!can.addExp()) return;
-          const used = new Set(v.experiments.map((x) => x.letter));
-          const next = LETTERS.find((l) => !used.has(l));
-          if (!next) return;
-          v.experiments.push({ letter: next, title: "", purpose: "", format: v.format, example: v.example, images: [], votes: [] });
-          v.experiments.sort((a, b) => a.letter.localeCompare(b.letter));
-          tabState().exp = null; // 새 실험이 보이도록 전체 보기로 돌린다
-          touch();
-          render();
-          const card = ctx.container.querySelector(`[data-exp-card="${next}"]`);
-          card.scrollIntoView({ behavior: "smooth", block: "center" });
-          card.querySelector('[data-field="title"]').focus({ preventScroll: true });
+        case "add-exp":
+          addExperiment();
           break;
-        }
         case "toggle-final":
           if (!can.pickFinal()) return;
           v.finalLetter = v.finalLetter === letter ? null : letter;
