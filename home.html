@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>byUs Story Builder</title>
+  <title>System Prompt Manager</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <link rel="stylesheet" href="style.css" />
   <script>
     // 로그인 정보가 없으면 로그인 화면으로 보낸다 (임시 메인 페이지)
-    if (!sessionStorage.getItem("byus_user")) location.replace("index.html");
+    if (!sessionStorage.getItem("spm_user")) location.replace("index.html");
   </script>
 </head>
 <body>
   <main class="card">
-    <h1 class="brand"><span class="brand__accent">byUs</span> Story Builder</h1>
+    <h1 class="brand"><span class="brand__accent">System</span> Prompt Manager</h1>
     <p id="welcome"></p>
     <button type="button" class="btn btn--outline" id="logout">로그아웃</button>
   </main>
   <script>
-    const user = JSON.parse(sessionStorage.getItem("byus_user") || "{}");
+    const user = JSON.parse(sessionStorage.getItem("spm_user") || "{}");
     document.getElementById("welcome").textContent = `${user.name || ""}님 (${user.role || ""}) 환영합니다.`;
     document.getElementById("logout").addEventListener("click", () => {
-      sessionStorage.removeItem("byus_user");
+      sessionStorage.removeItem("spm_user");
       location.replace("index.html");
     });
   </script>

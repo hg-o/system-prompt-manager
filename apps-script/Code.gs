@@ -1,5 +1,5 @@
 /**
- * byUs Story Builder - 로그인 / 권한 신청 API (Google Apps Script 웹 앱)
+ * System Prompt Manager - 로그인 / 권한 신청 API (Google Apps Script 웹 앱)
  *
  * 시트 열(1행 헤더). 시트가 비어 있으면 자동으로 만든다.
  *   name | id | password_hash | salt | role | activate | requested_at
@@ -35,7 +35,7 @@ function doPost(e) {
 }
 
 function doGet() {
-  return json_({ ok: true, message: 'byUs Story Builder API' });
+  return json_({ ok: true, message: 'System Prompt Manager API' });
 }
 
 // ---------- 권한 신청 ----------

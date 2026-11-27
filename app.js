@@ -98,7 +98,7 @@
         showFormError(loginError, data.message || "로그인에 실패했습니다.");
         return;
       }
-      sessionStorage.setItem("byus_user", JSON.stringify(data.user));
+      sessionStorage.setItem("spm_user", JSON.stringify(data.user));
       window.location.href = HOME_URL || "home.html";
     } catch (err) {
       showFormError(loginError, err.message);

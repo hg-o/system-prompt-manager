@@ -1,4 +1,4 @@
-# byUs Story Builder · 로그인
+# System Prompt Manager · 로그인
 
 정적 로그인 화면(`index.html`)과 Google Sheets에 계정을 저장하는 Apps Script API로 구성됩니다.
 
