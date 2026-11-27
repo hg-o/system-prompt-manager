@@ -184,6 +184,8 @@
   };
   const canEditCard = (e) => (e.letter === FINAL ? can.editFinal() : can.editExp());
 
+  const TRASH =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>';
   const CHEVRON =
     '<svg class="select-wrap__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>';
 
@@ -375,9 +377,7 @@
       );
     if (!isFinalCopy && can.addExp())
       actions.push(
-        `<button type="button" class="icon-btn icon-btn--sm" data-action="delete-exp" data-exp="${e.letter}" aria-label="${id} 삭제" title="삭제">
-           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
-         </button>`
+        `<button type="button" class="btn btn--danger-outline btn--xs" data-action="delete-exp" data-exp="${e.letter}">${TRASH}${id} 실험안 삭제</button>`
       );
     if (isFinalCopy && can.editFinal())
       actions.push(`<button type="button" class="btn btn--primary btn--xs" data-action="confirm-final">최종 확정</button>`);
@@ -507,7 +507,7 @@
     const headAction = ctx.canEdit
       ? `<div class="version-actions">
            ${v.status === "final" ? `<button type="button" class="btn btn--primary btn--sm" data-action="copy-version">새 버전으로 사본 생성</button>` : ""}
-           <button type="button" class="btn btn--danger-outline btn--sm" data-action="delete-version">버전 삭제</button>
+           <button type="button" class="btn btn--danger-outline btn--sm" data-action="delete-version" title="V${v.no} 버전과 그 안의 실험안을 모두 삭제합니다">${TRASH}V${v.no} 버전 전체 삭제</button>
          </div>`
       : "";
     // 실험 설계 단계에서는 실험안이 이미 있을 때만(뒤 단계에서 돌아온 경우) 실험 과정을 읽기 전용으로 보여준다
@@ -519,14 +519,22 @@
       <section class="panel${v.status === "final" ? " is-final-version" : ""}">
         <div class="version-head">
           <div class="version-meta">
-            <div class="select-wrap version-select">
-              <select class="input select" data-action="select-version" aria-label="버전 선택">${addVersionOption}${options}</select>
-              ${CHEVRON}
+            <div class="vpick">
+              <span class="vpick__label">버전</span>
+              <div class="vpick__row">
+                <div class="select-wrap version-select">
+                  <select class="input select" data-action="select-version" aria-label="버전 선택">${addVersionOption}${options}</select>
+                  ${CHEVRON}
+                </div>
+                <span class="status-pill status-pill--${v.status}">${statusLabel(v.status)}</span>
+              </div>
             </div>
-            <span class="status-pill status-pill--${v.status}">${statusLabel(v.status)}</span>
-            <div class="select-wrap exp-select">
-              <select class="input select" data-action="select-exp" aria-label="V${v.no} 실험 선택" ${cards.length || addExpOption ? "" : "disabled"}>${expOptions}</select>
-              ${CHEVRON}
+            <div class="vpick">
+              <span class="vpick__label">V${v.no}의 실험안</span>
+              <div class="select-wrap exp-select">
+                <select class="input select" data-action="select-exp" aria-label="V${v.no} 실험안 선택" ${cards.length || addExpOption ? "" : "disabled"}>${expOptions}</select>
+                ${CHEVRON}
+              </div>
             </div>
             <dl class="version-dates">
               <div><dt>버전 생성일</dt><dd>${v.createdAt}</dd></div>
@@ -651,15 +659,43 @@
   const deleteConfirm = document.getElementById("delete-confirm");
   let pendingDelete = null;
 
-  // kind: "버전" | "실험안"
-  function askDelete(kind, target, note, onConfirm) {
-    document.getElementById("delete-title").textContent = `정말 이 ${kind}을 삭제하시겠습니까?`;
+  // kind: "version" | "exp". scope: 무엇이 지워지고 무엇이 남는지 알려주는 문장들
+  function askDelete({ kind, target, scope, onConfirm }) {
+    const isVersion = kind === "version";
+    const chip = document.getElementById("delete-kind");
+    chip.textContent = isVersion ? "버전 전체 삭제" : "실험안 1개 삭제";
+    chip.className = `delete-kind delete-kind--${kind}`;
+    document.getElementById("delete-title").textContent = `정말 이 ${isVersion ? "버전" : "실험안"}을 삭제하시겠습니까?`;
     document.getElementById("delete-target").textContent = target;
-    document.getElementById("delete-note").textContent = note;
+    document.getElementById("delete-scope").innerHTML = scope.map((line) => `<li>${line}</li>`).join("");
     deleteInput.value = "";
     deleteConfirm.disabled = true;
     pendingDelete = onConfirm;
     ctx.openModal(deleteModal);
+  }
+
+  function versionDeleteScope(v) {
+    const { versions } = tabState();
+    const ids = v.experiments.map((e) => `V${v.no}-${e.letter}`);
+    const votes = v.experiments.reduce((sum, e) => sum + e.votes.length, 0);
+    const parts = ["실험 설계", ids.length ? `실험안 ${ids.length}개 (${ids.join(", ")})` : "실험안 0개"];
+    if (v.final) parts.push(`V${v.no}-Final`);
+    if (votes) parts.push(`투표 ${votes}건`);
+    const scope = [`<b>V${v.no} 버전 전체</b>가 삭제됩니다.`, `함께 삭제되는 것: ${esc(parts.join(", "))}`];
+    const next = versions[versions.indexOf(v) + 1];
+    if (next) scope.push(`뒤 버전 번호가 하나씩 앞당겨집니다. (V${next.no} → V${v.no})`);
+    return scope;
+  }
+
+  function expDeleteScope(v, exp) {
+    const rest = v.experiments.length - 1;
+    const scope = [
+      `<b>실험안 V${v.no}-${exp.letter} 하나만</b> 삭제됩니다.`,
+      `V${v.no} 버전${rest ? `과 다른 실험안 ${rest}개` : ""}는 그대로 남습니다.`,
+    ];
+    const next = v.experiments[v.experiments.indexOf(exp) + 1];
+    if (next) scope.push(`뒤 실험안 이름이 하나씩 앞당겨집니다. (V${v.no}-${next.letter} → V${v.no}-${exp.letter})`);
+    return scope;
   }
 
   deleteInput.addEventListener("input", () => {
@@ -778,12 +814,12 @@
           break;
         case "delete-version":
           if (!ctx.canEdit || !v) return;
-          askDelete(
-            "버전",
-            `V${v.no}${v.design.title ? ` · ${v.design.title}` : ""}`,
-            "삭제하면 실험 설계와 실험안, 투표가 모두 지워지고, 뒤 버전 번호가 하나씩 앞당겨집니다.",
-            () => deleteVersion(v)
-          );
+          askDelete({
+            kind: "version",
+            target: `V${v.no}${v.design.title ? ` · ${v.design.title}` : ""}`,
+            scope: versionDeleteScope(v),
+            onConfirm: () => deleteVersion(v),
+          });
           break;
         case "remove-design-file":
           if (!can.editDesign()) return;
@@ -832,12 +868,12 @@
         case "delete-exp": {
           if (!can.addExp()) return;
           const exp = findExp(letter);
-          askDelete(
-            "실험안",
-            `V${v.no}-${letter}${exp.title ? ` · ${exp.title}` : ""}`,
-            "삭제하면 이 실험안의 내용과 이미지가 지워지고, 뒤 실험안 이름이 하나씩 앞당겨집니다.",
-            () => deleteExperiment(v, letter)
-          );
+          askDelete({
+            kind: "exp",
+            target: `V${v.no}-${letter}${exp.title ? ` · ${exp.title}` : ""}`,
+            scope: expDeleteScope(v, exp),
+            onConfirm: () => deleteExperiment(v, letter),
+          });
           break;
         }
         case "remove-img":

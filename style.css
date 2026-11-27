@@ -637,18 +637,18 @@ body.is-app .bg-blob { display: none; }
 }
 .version-head {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 22px;
 }
 .version-meta {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   flex-wrap: wrap;
   gap: 18px;
 }
-.version-select { width: 190px; }
+.version-select { width: 236px; }
 .version-select .select { height: 42px; font-size: 16px; font-weight: 700; }
 .exp-select { width: 260px; max-width: 100%; }
 .exp-select .select { height: 42px; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -920,7 +920,29 @@ body.is-app .bg-blob { display: none; }
 .delete-target { margin: 8px 0 0; font-size: 14px; font-weight: 600; color: var(--danger); word-break: break-word; }
 .delete-desc { margin: 14px 0 12px; font-size: 14px; line-height: 1.6; color: var(--text); }
 .delete-desc b { color: var(--ink); user-select: all; }
-.delete-note { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.delete-kind { display: inline-block; margin-bottom: 10px; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
+.delete-kind--version { background: var(--danger); color: #fff; }
+.delete-kind--exp { background: #fef2f2; color: var(--danger); border: 1px solid #f5c2c2; }
+.delete-scope {
+  margin: 14px 0 0;
+  padding: 12px 14px 12px 30px;
+  border-radius: 10px;
+  background: #fef6f6;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.delete-scope li + li { margin-top: 2px; }
+.delete-scope b { color: var(--danger); }
+.modal__panel--delete .done-message { margin-bottom: 0; }
+.btn--danger-outline svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.btn--xs.btn--danger-outline svg { width: 13px; height: 13px; }
+.btn--xs.btn--danger-outline { gap: 5px; }
+.btn--sm.btn--danger-outline { gap: 6px; white-space: nowrap; }
+.vpick { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.vpick__label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.vpick__row { display: flex; align-items: center; gap: 10px; }
 .delete-actions { display: flex; gap: 8px; margin-top: 18px; }
 .delete-actions .btn { flex: 1; height: 46px; }
 
