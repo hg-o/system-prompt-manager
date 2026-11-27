@@ -998,8 +998,8 @@ body.is-app .bg-blob { display: none; }
 /* ---------- 실험중 갤러리 카드 ---------- */
 .exp-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 16px;
   align-items: start;
 }
 .gcard {
@@ -1037,11 +1037,11 @@ body.is-app .bg-blob { display: none; }
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.gcard__strip { display: flex; gap: 6px; padding: 10px 14px 0; overflow-x: auto; cursor: default; }
+.gcard__strip { display: flex; gap: 5px; padding: 8px 12px 0; overflow-x: auto; cursor: default; }
 .gcard__pick {
   flex: 0 0 auto;
-  width: 46px;
-  height: 46px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 2px solid transparent;
   border-radius: 8px;
@@ -1053,10 +1053,11 @@ body.is-app .bg-blob { display: none; }
 .gcard__pick:hover { opacity: 1; }
 .gcard__pick.is-active { border-color: var(--ink); opacity: 1; }
 .gcard__pick img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.gcard__body { padding: 14px 18px 4px; }
+.gcard__body { padding: 12px 14px 4px; }
+.gcard__body:last-child { padding-bottom: 14px; }
 .gcard__title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14.5px;
   font-weight: 700;
   color: var(--ink);
   overflow: hidden;
@@ -1067,7 +1068,7 @@ body.is-app .bg-blob { display: none; }
 }
 .gcard__purpose {
   margin: 6px 0 0;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.55;
   color: var(--muted);
   overflow: hidden;
@@ -1080,7 +1081,7 @@ body.is-app .bg-blob { display: none; }
 .gcard__empty { color: var(--subtle); font-weight: 400; }
 .gcard__more { display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 600; color: #059a50; }
 .gcard:hover .gcard__more { text-decoration: underline; }
-.vote--compact { margin: 12px 18px 16px; padding-top: 12px; cursor: default; }
+.vote--compact { margin: 10px 14px 14px; padding-top: 10px; cursor: default; }
 .vote--compact .vote__list { margin-top: 10px; }
 
 .modal__panel--image { max-width: 880px; padding: 52px 20px 16px; text-align: center; }

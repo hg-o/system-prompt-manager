@@ -222,7 +222,7 @@
       case "design":
         return "실험 설계안을 작성합니다. 파일 첨부는 선택입니다. 다 쓰면 실험안 작성 단계로 넘깁니다.";
       case "draft":
-        return "실험안(A~J)을 만들고 내용을 채웁니다. 실험안은 이 단계에서만 추가·삭제할 수 있습니다.";
+        return "실험안(A~J)을 만들고 내용을 채웁니다. 카드를 누르면 그 실험안을 작성·삭제할 수 있습니다. 실험안은 이 단계에서만 추가·삭제할 수 있습니다.";
       case "testing":
         return "실험안마다 투표하고 이유를 남깁니다. 여러 실험안에 투표할 수 있습니다. 카드를 누르면 프롬프트까지 전체 내용이 보이고, 거기서 하나를 최종 선택한 뒤 실험완료로 넘깁니다.";
       case "done":
@@ -401,7 +401,7 @@
           <p class="field__error">${esc(imgError)}</p>
           ${editable ? `<p class="muted-sm">png, jpg, jpeg · 최대 ${MAX_IMAGES}장</p>` : ""}
         </div>
-        ${isFinalCopy ? "" : voteSection(e)}
+        ${isFinalCopy || v.status === "draft" ? "" : voteSection(e)}
       </article>`;
   }
 
@@ -438,7 +438,7 @@
           <p class="gcard__purpose">${e.purpose ? esc(e.purpose) : `<span class="gcard__empty">개선 목적이 없습니다.</span>`}</p>
           <span class="gcard__more">전체 내용 보기 ›</span>
         </div>
-        ${voteSection(e, true)}
+        ${v.status === "testing" ? voteSection(e, true) : ""}
       </article>`;
   }
 
@@ -489,14 +489,17 @@
 
     // 실험 드롭다운: 선택한 버전의 실험만 나온다. 실험완료·최종이면 Final 도 나온다. "전체 실험"이면 모든 카드를 보여준다.
     const showFinal = (v.status === "done" || v.status === "final") && v.final;
-    const cards = [...(showFinal ? [v.final] : []), ...v.experiments];
+    // 실험 설계 단계는 실험안 작성 전이라 실험 과정이 없다 (뒤 단계에서 돌아와 실험안이 남아 있어도 보여주지 않는다)
+    const inDesign = v.status === "design";
+    const cards = inDesign ? [] : [...(showFinal ? [v.final] : []), ...v.experiments];
     const filter = cards.some((e) => e.letter === tabState().exp) ? tabState().exp : null;
     const shown = filter ? cards.filter((e) => e.letter === filter) : cards;
     const full = n >= LETTERS.length;
     const addExpOption = can.addExp()
       ? `<option value="${NEW}" ${full ? "disabled" : ""}>＋ 새 실험안 추가${full ? " (최대 10개)" : ""}</option>`
       : "";
-    const gallery = v.status === "testing" && !filter; // 실험중 + 전체 보기 = 갤러리 카드
+    // 실험안 작성·실험중의 전체 보기 = 갤러리 카드 (실험안 작성에서는 투표 기능만 뺀다)
+    const gallery = (v.status === "draft" || v.status === "testing") && !filter;
     const expOptions =
       addExpOption +
       `<option value="" ${filter ? "" : "selected"}>${cards.length ? `전체 실험 (${cards.length})` : "실험 없음"}</option>` +
@@ -510,8 +513,6 @@
            <button type="button" class="btn btn--danger-outline btn--sm" data-action="delete-version" title="V${v.no} 버전과 그 안의 실험안을 모두 삭제합니다">${TRASH}V${v.no} 버전 전체 삭제</button>
          </div>`
       : "";
-    // 실험 설계 단계에서는 실험안이 이미 있을 때만(뒤 단계에서 돌아온 경우) 실험 과정을 읽기 전용으로 보여준다
-    const showExpSection = v.status !== "design" || n > 0;
     const emptyText = v.status === "draft" && ctx.canEdit ? "아직 실험안이 없습니다. '+ 실험 추가'로 실험안을 만들어 주세요." : "실험이 없습니다.";
 
     ctx.container.innerHTML = `${tabsHtml}
@@ -529,7 +530,7 @@
                 <span class="status-pill status-pill--${v.status}">${statusLabel(v.status)}</span>
               </div>
             </div>
-            <div class="vpick">
+            <div class="vpick" ${inDesign ? "hidden" : ""}>
               <span class="vpick__label">V${v.no}의 실험안</span>
               <div class="select-wrap exp-select">
                 <select class="input select" data-action="select-exp" aria-label="V${v.no} 실험안 선택" ${cards.length || addExpOption ? "" : "disabled"}>${expOptions}</select>
@@ -548,11 +549,11 @@
         ${designBlock(v)}
       </section>
 
-      <section class="exp-section" ${showExpSection ? "" : "hidden"}>
+      <section class="exp-section" ${inDesign ? "hidden" : ""}>
         <div class="exp-section__head">
           <h2>실험 과정 <span class="counter">${n}/${LETTERS.length}</span></h2>
           <div class="exp-section__actions">
-            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">${v.status === "testing" ? "← 갤러리로 돌아가기" : "전체 실험 보기"}</button>` : ""}
+            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">${v.status === "draft" || v.status === "testing" ? "← 전체 실험으로 돌아가기" : "전체 실험 보기"}</button>` : ""}
             ${
               can.addExp()
                 ? `<button type="button" class="btn btn--outline btn--sm" data-action="add-exp" ${n >= LETTERS.length ? "disabled" : ""}>+ 실험 추가</button>`
@@ -617,11 +618,11 @@
     const next = LETTERS[v.experiments.length]; // 실험안은 항상 A 부터 빈틈없이 이어진다
     if (!can.addExp() || !next) return render();
     v.experiments.push({ letter: next, title: "", purpose: "", format: "", example: "", images: [], votes: [] });
-    tabState().exp = null; // 새 실험이 보이도록 전체 보기로 돌린다
+    tabState().exp = next; // 새 실험안을 바로 작성할 수 있게 그 실험안의 전체 내용을 연다
     touch();
     render();
     const card = ctx.container.querySelector(`[data-exp-card="${next}"]`);
-    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    ctx.container.querySelector(".exp-section").scrollIntoView({ block: "start" });
     card.querySelector('[data-field="title"]').focus({ preventScroll: true });
   }
 
