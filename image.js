@@ -534,9 +534,11 @@
 
       <section class="exp-section" ${inDesign ? "hidden" : ""}>
         <div class="exp-section__head">
-          <h2>${finalOnly ? "최종안" : `실험 과정 <span class="counter">${n}/${LETTERS.length}</span>`}</h2>
+          <div class="exp-section__title">
+            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">← 전체보기</button>` : ""}
+            <h2>${finalOnly ? "최종안" : `실험안 <span class="counter">${n}/${LETTERS.length}</span>`}</h2>
+          </div>
           <div class="exp-section__actions">
-            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">← 전체 실험으로 돌아가기</button>` : ""}
             ${
               can.addExp()
                 ? `<button type="button" class="btn btn--outline btn--sm" data-action="add-exp" ${n >= LETTERS.length ? "disabled" : ""}>+ 실험 추가</button>`
@@ -595,7 +597,7 @@
     addVersion({ design: emptyDesign(), experiments: [] });
   }
 
-  // 실험 과정의 "+ 실험 추가" (실험안 작성 단계에서만)
+  // 실험안 영역의 "+ 실험 추가" (실험안 작성 단계에서만)
   function addExperiment() {
     const v = currentVersion();
     const next = LETTERS[v.experiments.length]; // 실험안은 항상 A 부터 빈틈없이 이어진다

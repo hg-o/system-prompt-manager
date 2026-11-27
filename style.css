@@ -696,6 +696,7 @@ body.is-app .bg-blob { display: none; }
   margin-bottom: 14px;
 }
 .exp-section__actions { display: flex; gap: 8px; }
+.exp-section__title { display: flex; align-items: center; gap: 12px; }
 .exp-section__head h2 {
   display: flex;
   align-items: baseline;
