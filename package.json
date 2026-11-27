@@ -1,8 +1,0 @@
-{
-  "name": "system-prompt-manager",
-  "private": true,
-  "type": "module",
-  "engines": {
-    "node": ">=18"
-  }
-}

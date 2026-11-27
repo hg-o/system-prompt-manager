@@ -7,27 +7,28 @@
 
   const $ = (sel) => document.querySelector(sel);
 
-  // ---------- API ----------
-  // Vercel 서버 함수(/api/login, /api/signup)를 부른다.
-  async function callApi(action, payload) {
-    let res;
-    try {
-      res = await fetch("/api/" + action, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch (e) {
-      throw new Error("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
-    }
-    let data = null;
-    try {
-      data = await res.json();
-    } catch (e) {
-      /* JSON 이 아닌 응답 */
-    }
-    if (data && typeof data.ok === "boolean") return data;
-    throw new Error("요청 처리 중 오류가 발생했습니다. (" + res.status + ")");
+  // ---------- API (프로토타입 목업) ----------
+  // 실제 서버 없이 항상 성공을 돌려준다. 백엔드를 붙일 때 이 함수만 바꾸면 된다.
+  //
+  // 기대하는 응답 형식
+  //   login  요청 { id, password }             → { ok: true, user: { id, name, role } }
+  //                                              { ok: false, message }   (예: 비밀번호 불일치, 승인 대기)
+  //   signup 요청 { name, id, password, role } → { ok: true }
+  //                                              { ok: false, field?, message }   (field 가 있으면 해당 입력칸 아래에 표시)
+  //   승인 규칙: 시트(DB)의 activate 가 TRUE 인 계정만 로그인 가능
+  const MOCK_DELAY_MS = 600;
+
+  function callApi(action, payload) {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        if (action === "login") {
+          const id = payload.id || "guest@webtoon.com";
+          resolve({ ok: true, user: { id, name: id.split("@")[0], role: "Editor" } });
+        } else {
+          resolve({ ok: true });
+        }
+      }, MOCK_DELAY_MS);
+    });
   }
 
   function setLoading(btn, loading) {
@@ -88,10 +89,7 @@
     const id = loginForm.elements.id.value.trim().toLowerCase();
     const password = loginForm.elements.password.value;
 
-    if (!id || !password) {
-      showFormError(loginError, "아이디와 비밀번호를 입력해 주세요.");
-      return;
-    }
+    // 프로토타입: 어떤 아이디·비밀번호(빈 값 포함)로도 로그인된다.
 
     setLoading(loginBtn, true);
     try {
