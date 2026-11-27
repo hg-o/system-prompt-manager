@@ -1,4 +1,3 @@
-<script>
 (function () {
   "use strict";
 
@@ -9,14 +8,26 @@
   const $ = (sel) => document.querySelector(sel);
 
   // ---------- API ----------
-  // 같은 Apps Script 웹 앱에서 화면을 띄우므로 google.script.run 으로 서버 함수(api)를 부른다.
-  function callApi(action, payload) {
-    return new Promise((resolve, reject) => {
-      google.script.run
-        .withSuccessHandler(resolve)
-        .withFailureHandler(() => reject(new Error("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.")))
-        .api(action, payload);
-    });
+  // Vercel 서버 함수(/api/login, /api/signup)를 부른다.
+  async function callApi(action, payload) {
+    let res;
+    try {
+      res = await fetch("/api/" + action, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      throw new Error("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+    }
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (e) {
+      /* JSON 이 아닌 응답 */
+    }
+    if (data && typeof data.ok === "boolean") return data;
+    throw new Error("요청 처리 중 오류가 발생했습니다. (" + res.status + ")");
   }
 
   function setLoading(btn, loading) {
@@ -202,4 +213,3 @@
     }
   });
 })();
-</script>

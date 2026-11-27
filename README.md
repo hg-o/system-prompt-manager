@@ -1,32 +1,51 @@
 # System Prompt Manager · 로그인
 
-Google Apps Script 웹 앱 하나로 동작합니다. 웹 앱이 로그인 화면을 띄우고, 신청 정보와 계정은 Google 시트에 저장합니다.
-회사 Workspace 정책상 웹 앱은 webtoon.com 계정으로 Google에 로그인한 사람만 열 수 있습니다.
+Vercel에 배포합니다. 정적 화면(`index.html`)이 Vercel 서버 함수(`/api/login`, `/api/signup`)를 부르고,
+서버 함수가 Google 서비스 계정으로 시트를 직접 읽고 씁니다.
 
-## 파일 (`apps-script/`)
+## 파일
 
 | 파일 | 설명 |
 | --- | --- |
-| `Code.gs` | 화면을 띄우고(`doGet`), 권한 신청과 로그인을 처리(`api`) |
-| `Index.html` | 로그인 화면, ID 등록 및 권한 요청 모달, 신청 완료 안내, 로그인 후 임시 화면 |
-| `Stylesheet.html` | 스타일 |
-| `JavaScript.html` | 화면 동작. `google.script.run`으로 서버 함수 `api`를 부름 |
+| `index.html`, `style.css`, `app.js` | 로그인 화면, ID 등록 및 권한 요청 모달, 신청 완료 안내, 로그인 후 임시 화면 |
+| `api/login.js` | 로그인. 아이디·비밀번호·activate 확인 |
+| `api/signup.js` | 권한 신청. 시트에 한 행 추가 |
+| `api/_lib/sheets.js` | Google Sheets API 호출 (서비스 계정 인증) |
+| `api/_lib/auth.js` | 비밀번호 해시, 입력 검사 |
 
-## 배포
+외부 npm 패키지는 쓰지 않습니다 (Node 18 이상).
 
-1. [Apps Script 프로젝트](https://script.google.com/home/projects/1DFa0C8MxAmG00d-wptIR3CHuVRO7DgsTW8SDuqdZ5ru1N2VfDb383lkS/edit)를 엽니다.
-2. `Code.gs` 내용을 이 저장소의 `apps-script/Code.gs`로 바꿉니다.
-3. 파일 옆 **+ → HTML**로 `Index`, `Stylesheet`, `JavaScript` 세 파일을 만들고(이름에 `.html`은 붙이지 않음) 같은 이름의 파일 내용을 붙여 넣은 뒤 저장합니다.
-4. **배포 → 배포 관리 → 수정(연필) → 버전: 새 버전 → 배포**를 누릅니다. 웹 앱 URL은 그대로 유지됩니다.
-   - 다음 사용자 인증 정보로 실행: **나**
-   - 액세스 권한이 있는 사용자: **webtoon.com 내 모든 사용자**
-5. 웹 앱 URL을 브라우저로 열면 로그인 화면이 나옵니다.
+## 설정
 
-> 코드를 고친 뒤에는 4번처럼 **새 버전**으로 다시 배포해야 반영됩니다.
+### 1. Google 서비스 계정 만들기
+
+1. [Google Cloud 콘솔](https://console.cloud.google.com/)에서 프로젝트를 고르거나 새로 만듭니다.
+2. **API 및 서비스 → 라이브러리**에서 **Google Sheets API**를 사용 설정합니다.
+3. **IAM 및 관리자 → 서비스 계정 → 서비스 계정 만들기**로 계정을 만듭니다 (역할은 주지 않아도 됩니다).
+4. 만든 계정의 **키 → 키 추가 → 새 키 만들기 → JSON**으로 키 파일을 받습니다.
+
+### 2. 시트 공유
+
+[시트](https://docs.google.com/spreadsheets/d/1DZaLuzsIrT3cKZqDXv-Z65bEuGMi1Vah8TchlGrsahg/edit)의 **공유**에 서비스 계정 이메일(`...@...iam.gserviceaccount.com`)을 **편집자**로 추가합니다.
+
+> 회사 정책으로 외부 계정과 공유가 막혀 있으면 이 단계가 실패합니다. 그때는 Workspace 관리자에게 서비스 계정 공유 허용을 요청해야 합니다.
+
+### 3. Vercel 환경 변수
+
+Vercel 프로젝트 **Settings → Environment Variables**에 넣고 다시 배포합니다.
+
+| 이름 | 값 |
+| --- | --- |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | 키 JSON의 `client_email` |
+| `GOOGLE_PRIVATE_KEY` | 키 JSON의 `private_key` 전체 (`-----BEGIN PRIVATE KEY-----`부터 `-----END PRIVATE KEY-----\n`까지) |
+| `SPREADSHEET_ID` | (선택) 기본값은 위 시트 |
+| `SHEET_GID` | (선택) 기본값 `0` |
+
+키 JSON 파일은 저장소에 올리지 마세요.
 
 ## 시트 구조
 
-첫 신청 때 1행 헤더가 자동으로 생깁니다. 열 순서는 바꿔도 헤더 이름으로 찾습니다.
+1행 헤더가 없으면 자동으로 만듭니다. 열 순서는 바꿔도 헤더 이름으로 찾습니다.
 
 | name | id | password_hash | salt | role | activate | requested_at |
 | --- | --- | --- | --- | --- | --- | --- |
