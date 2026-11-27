@@ -30,19 +30,6 @@
 | 비밀번호 | 영문, 숫자, 기호를 모두 포함해 8자 이상 |
 | 권한 | `Editor` 또는 `Viewer` |
 
-## 백엔드 연결 시 (개발자 참고)
+## 개발자 인계
 
-`app.js`의 `callApi(action, payload)`를 실제 API 호출로 바꾸면 됩니다. 화면은 아래 응답 형식을 기대합니다.
-
-| action | 요청 | 성공 | 실패 |
-| --- | --- | --- | --- |
-| `login` | `{ id, password }` | `{ ok: true, user: { id, name, role } }` | `{ ok: false, message }` |
-| `signup` | `{ name, id, password, role }` | `{ ok: true }` | `{ ok: false, field?, message }` |
-
-- `message`는 화면에 그대로 표시됩니다. `signup`에서 `field`(`name`·`id`·`password`·`role`)를 주면 해당 입력칸 아래에 표시됩니다.
-- 기획 요구사항
-  - 신청 정보 저장소: [Google 시트](https://docs.google.com/spreadsheets/d/1DZaLuzsIrT3cKZqDXv-Z65bEuGMi1Vah8TchlGrsahg/edit)
-  - 관리자가 `activate`를 `TRUE`로 바꾼 계정만 로그인 가능. 승인 전이면 "관리자 승인 대기 중입니다." 같은 안내
-  - 이미 신청한 아이디는 다시 신청 불가
-- 서버에서도 위 입력 규칙을 다시 검사하고, 비밀번호는 해시로 저장해야 합니다.
-- Google 시트 연결을 시도했던 코드(Vercel 서버 함수 + 서비스 계정)는 커밋 `e1b21a1`에 남아 있습니다.
+백엔드 연결에 필요한 API 규격, 요구사항, 정해지지 않은 사항은 [HANDOFF.md](HANDOFF.md)에 정리되어 있습니다.
