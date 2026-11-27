@@ -132,15 +132,17 @@
     openModal(statusModal);
   }
 
-  // ---------- 로그인 후 화면 (임시) ----------
+  // ---------- 로그인 후 화면 ----------
   // 로그인 정보는 localStorage 에 두어 새로고침하거나 창을 다시 열어도 유지한다. 로그아웃하면 지운다.
   const loginView = $("#login-view");
   const homeView = $("#home-view");
 
   function showHome(user) {
-    $("#welcome").textContent = `${user.name}님 (${user.role}) 환영합니다.`;
+    $("#user-name").textContent = user.name;
+    $("#user-role").textContent = user.role;
     loginView.hidden = true;
     homeView.hidden = false;
+    document.body.classList.add("is-app");
   }
 
   $("#logout").addEventListener("click", () => {
@@ -148,7 +150,13 @@
     loginForm.reset();
     homeView.hidden = true;
     loginView.hidden = false;
+    document.body.classList.remove("is-app");
   });
+
+  // LLM / Image 화면은 아직 없다. 연결 전까지 아무 동작도 하지 않는다.
+  document.querySelectorAll("[data-choice]").forEach((el) =>
+    el.addEventListener("click", (e) => e.preventDefault())
+  );
 
   try {
     const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
