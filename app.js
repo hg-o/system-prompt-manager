@@ -27,7 +27,7 @@
   //                                              { ok: false, field?, message }   (field 가 있으면 해당 입력칸 아래에 표시)
   //
   // 프로토타입 시연용: 아이디에 "pending" 이 들어가면 승인 대기, "rejected" 가 들어가면 반려 안내창이 뜬다.
-  // 그 밖에는 어떤 아이디·비밀번호로도 로그인된다.
+  // "viewer" 가 들어가면 Viewer 권한(읽기 전용)으로 로그인된다. 그 밖에는 어떤 아이디·비밀번호로도 Editor 로 로그인된다.
   const MOCK_DELAY_MS = 600;
 
   function callApi(action, payload) {
@@ -37,7 +37,8 @@
           const id = payload.id || "guest@webtoon.com";
           if (id.includes("pending")) return resolve({ ok: false, status: "pending" });
           if (id.includes("rejected")) return resolve({ ok: false, status: "rejected" });
-          resolve({ ok: true, user: { id, name: id.split("@")[0], role: "Editor" } });
+          const role = id.includes("viewer") ? "Viewer" : "Editor";
+          resolve({ ok: true, user: { id, name: id.split("@")[0], role } });
         } else {
           resolve({ ok: true });
         }
@@ -136,27 +137,64 @@
   // 로그인 정보는 localStorage 에 두어 새로고침하거나 창을 다시 열어도 유지한다. 로그아웃하면 지운다.
   const loginView = $("#login-view");
   const homeView = $("#home-view");
+  let currentUser = null;
 
   function showHome(user) {
+    currentUser = user;
     $("#user-name").textContent = user.name;
     $("#user-role").textContent = user.role;
     loginView.hidden = true;
     homeView.hidden = false;
     document.body.classList.add("is-app");
+    route();
   }
 
   $("#logout").addEventListener("click", () => {
+    currentUser = null;
     localStorage.removeItem(SESSION_KEY);
     loginForm.reset();
     homeView.hidden = true;
     loginView.hidden = false;
     document.body.classList.remove("is-app");
+    history.replaceState(null, "", location.pathname + location.search);
   });
 
-  // LLM / Image 화면은 아직 없다. 연결 전까지 아무 동작도 하지 않는다.
-  document.querySelectorAll("[data-choice]").forEach((el) =>
-    el.addEventListener("click", (e) => e.preventDefault())
-  );
+  // ---------- 화면 이동 (해시 라우팅) ----------
+  // #/home, #/llm, #/image/feature, #/image/byk, #/image/gen-prompt
+  const SECTIONS = { home: "Home", llm: "LLM", image: "Image" };
+  const SEP_ICON =
+    '<svg class="breadcrumb__sep" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>';
+
+  function route() {
+    if (!currentUser) return;
+    const [rawSection, rawTab] = location.hash.replace(/^#\/?/, "").split("/");
+    const section = SECTIONS[rawSection] ? rawSection : "home";
+    const tabs = window.ImagePage.TABS;
+    const tab = tabs.find((t) => t.key === rawTab) ? rawTab : tabs[0].key;
+    const navKey = section === "image" ? `image/${tab}` : section;
+
+    document.querySelectorAll("[data-page]").forEach((p) => (p.hidden = p.dataset.page !== section));
+    document.querySelectorAll("[data-nav]").forEach((el) => {
+      const active = el.dataset.nav === navKey;
+      el.classList.toggle("is-active", active);
+      el.classList.toggle("is-open", el.dataset.nav === section && !active);
+      if (active) el.setAttribute("aria-current", "page");
+      else el.removeAttribute("aria-current");
+    });
+
+    const crumbs = ["System Prompt Manager", SECTIONS[section]];
+    if (section === "image") crumbs.push(tabs.find((t) => t.key === tab).label);
+    $("#breadcrumb").innerHTML = crumbs
+      .map((c, i) => `<span class="${i === 0 ? "breadcrumb__root" : i === crumbs.length - 1 ? "breadcrumb__current" : "breadcrumb__mid"}">${c}</span>`)
+      .join(SEP_ICON);
+
+    if (section === "image") {
+      window.ImagePage.mount($("#image-page"), { tab, canEdit: currentUser.role === "Editor", openModal });
+    }
+    window.scrollTo(0, 0);
+  }
+
+  window.addEventListener("hashchange", route);
 
   try {
     const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
