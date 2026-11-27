@@ -1,5 +1,7 @@
 /**
- * System Prompt Manager - 로그인 / 권한 신청 API (Google Apps Script 웹 앱)
+ * System Prompt Manager - 로그인 / 권한 신청 (Google Apps Script 웹 앱)
+ *
+ * 프로젝트 파일: Code.gs, Index.html, Stylesheet.html, JavaScript.html
  *
  * 시트 열(1행 헤더). 시트가 비어 있으면 자동으로 만든다.
  *   name | id | password_hash | salt | role | activate | requested_at
@@ -14,28 +16,31 @@ const ROLES = ['Editor', 'Viewer'];
 // 아이디는 @webtoon.com 회사 이메일만 허용한다
 const EMAIL_RE = /^[^\s@]+@webtoon\.com$/;
 
-function doPost(e) {
-  let body;
-  try {
-    body = JSON.parse(e.postData.contents);
-  } catch (err) {
-    return json_({ ok: false, message: '잘못된 요청입니다.' });
-  }
+/** 웹 앱 주소로 들어오면 로그인 화면(Index.html)을 띄운다. */
+function doGet() {
+  return HtmlService.createTemplateFromFile('Index')
+    .evaluate()
+    .setTitle('System Prompt Manager · 로그인')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
 
+/** Index.html 에서 Stylesheet.html, JavaScript.html 을 끼워 넣는다. */
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+/** 화면에서 google.script.run.api(action, payload) 로 부르는 함수 */
+function api(action, payload) {
   try {
-    switch (body.action) {
-      case 'signup': return json_(signup_(body));
-      case 'login':  return json_(login_(body));
-      default:       return json_({ ok: false, message: '알 수 없는 요청입니다.' });
+    switch (action) {
+      case 'signup': return signup_(payload || {});
+      case 'login':  return login_(payload || {});
+      default:       return { ok: false, message: '알 수 없는 요청입니다.' };
     }
   } catch (err) {
     console.error(err);
-    return json_({ ok: false, message: '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' });
+    return { ok: false, message: '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' };
   }
-}
-
-function doGet() {
-  return json_({ ok: true, message: 'System Prompt Manager API' });
 }
 
 // ---------- 권한 신청 ----------
@@ -153,8 +158,4 @@ function isTrue_(v) {
 /** =, +, -, @ 로 시작하는 입력이 수식으로 실행되지 않도록 막는다. */
 function safeText_(s) {
   return /^[=+\-@]/.test(s) ? "'" + s : s;
-}
-
-function json_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }

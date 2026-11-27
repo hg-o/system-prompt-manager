@@ -6,14 +6,14 @@
   <title>System Prompt Manager · 로그인</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
-  <link rel="stylesheet" href="style.css" />
+  <?!= include('Stylesheet'); ?>
 </head>
 <body>
   <div class="bg-blob bg-blob--green" aria-hidden="true"></div>
   <div class="bg-blob bg-blob--purple" aria-hidden="true"></div>
   <div class="bg-blob bg-blob--blue" aria-hidden="true"></div>
 
-  <main class="card login-card">
+  <main class="card login-card" id="login-view">
     <div class="logo" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M13 21h8" />
@@ -46,6 +46,13 @@
       ID 등록 및 권한 요청
     </button>
     <p class="hint">권한은 관리자 승인 후 부여됩니다.</p>
+  </main>
+
+  <!-- 로그인 후 화면 (임시) -->
+  <main class="card" id="home-view" hidden>
+    <h1 class="brand"><span class="brand__accent">System</span> Prompt Manager</h1>
+    <p id="welcome"></p>
+    <button type="button" class="btn btn--outline" id="logout">로그아웃</button>
   </main>
 
   <!-- 회원가입 모달 -->
@@ -110,7 +117,6 @@
     </div>
   </div>
 
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <?!= include('JavaScript'); ?>
 </body>
 </html>
