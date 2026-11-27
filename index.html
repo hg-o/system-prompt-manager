@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>byUs Story Builder · 로그인</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg-blob bg-blob--green" aria-hidden="true"></div>
+  <div class="bg-blob bg-blob--purple" aria-hidden="true"></div>
+  <div class="bg-blob bg-blob--blue" aria-hidden="true"></div>
+
+  <main class="card login-card">
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 21h8" />
+        <path d="M21.17 6.81a2.83 2.83 0 0 0-4-4L3.84 16.15a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z" />
+      </svg>
+    </div>
+    <h1 class="brand"><span class="brand__accent">byUs</span> Story Builder</h1>
+
+    <form id="login-form" class="form" novalidate>
+      <div class="field">
+        <label class="field__label" for="login-id">ID</label>
+        <input class="input" id="login-id" name="id" type="email" autocomplete="username" placeholder="회사 이메일 주소" required />
+      </div>
+      <div class="field">
+        <label class="field__label" for="login-pw">PW</label>
+        <input class="input" id="login-pw" name="password" type="password" autocomplete="current-password" placeholder="비밀번호" required />
+      </div>
+      <p class="form-error" id="login-error" role="alert" hidden></p>
+      <button type="submit" class="btn btn--primary btn--lg" id="login-submit">로그인</button>
+    </form>
+
+    <hr class="divider" />
+
+    <button type="button" class="btn btn--outline btn--lg" id="open-signup">
+      <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="9" cy="7" r="4" />
+        <path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1" />
+        <path d="M19 8v6M16 11h6" />
+      </svg>
+      ID 등록 및 권한 요청
+    </button>
+    <p class="hint">권한은 관리자 승인 후 부여됩니다.</p>
+  </main>
+
+  <!-- 회원가입 모달 -->
+  <div class="modal" id="signup-modal" role="dialog" aria-modal="true" aria-labelledby="signup-title" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__panel">
+      <button type="button" class="icon-btn modal__close" data-close aria-label="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      </button>
+      <h2 class="modal__title" id="signup-title">ID 등록 및 권한 요청</h2>
+      <p class="modal__desc">신청 후 관리자가 승인하면 사이트를 이용할 수 있습니다.</p>
+
+      <form id="signup-form" class="form" novalidate>
+        <div class="field">
+          <label class="field__label" for="su-name">이름 <span class="req">*</span></label>
+          <input class="input" id="su-name" name="name" type="text" maxlength="16" placeholder="16자 이내" autocomplete="name" required />
+          <p class="field__error" data-for="name"></p>
+        </div>
+        <div class="field">
+          <label class="field__label" for="su-id">아이디 <span class="req">*</span></label>
+          <input class="input" id="su-id" name="id" type="email" placeholder="회사 이메일 주소 작성 (@webtoon.com)" autocomplete="email" required />
+          <p class="field__error" data-for="id"></p>
+        </div>
+        <div class="field">
+          <label class="field__label" for="su-pw">비밀번호 <span class="req">*</span></label>
+          <input class="input" id="su-pw" name="password" type="password" placeholder="영문, 숫자, 기호 · 8자 이상" autocomplete="new-password" required />
+          <p class="field__error" data-for="password"></p>
+        </div>
+        <div class="field">
+          <label class="field__label" for="su-role">권한 <span class="req">*</span></label>
+          <div class="select-wrap">
+            <select class="input select" id="su-role" name="role" required>
+              <option value="" selected disabled>권한을 선택하세요</option>
+              <option value="Editor">Editor</option>
+              <option value="Viewer">Viewer</option>
+            </select>
+            <svg class="select-wrap__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </div>
+          <p class="field__error" data-for="role"></p>
+        </div>
+        <p class="form-error" id="signup-error" role="alert" hidden></p>
+        <div class="btn-row">
+          <button type="button" class="btn btn--outline" data-close>취소</button>
+          <button type="submit" class="btn btn--primary" id="signup-submit">권한 신청하기</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 신청 완료 안내 -->
+  <div class="modal" id="done-modal" role="alertdialog" aria-modal="true" aria-labelledby="done-message" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__panel modal__panel--sm">
+      <button type="button" class="icon-btn modal__close" data-close aria-label="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      </button>
+      <div class="done-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+      </div>
+      <p class="done-message" id="done-message">권한이 신청되었습니다.<br />관리자 승인이 완료되면 로그인이 가능합니다.</p>
+      <button type="button" class="btn btn--primary btn--lg" data-close>확인</button>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
