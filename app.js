@@ -149,7 +149,9 @@
     route();
   }
 
-  $("#logout").addEventListener("click", () => {
+  $("#logout").addEventListener("click", () => window.ImagePage.guardLeave(logout));
+
+  function logout() {
     currentUser = null;
     localStorage.removeItem(SESSION_KEY);
     loginForm.reset();
@@ -157,7 +159,8 @@
     loginView.hidden = false;
     document.body.classList.remove("is-app");
     history.replaceState(null, "", location.pathname + location.search);
-  });
+    shownHash = "";
+  }
 
   // ---------- 화면 이동 (해시 라우팅) ----------
   // #/home, #/llm, #/image/feature, #/image/byk, #/image/gen-prompt
@@ -165,8 +168,11 @@
   const SEP_ICON =
     '<svg class="breadcrumb__sep" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>';
 
+  let shownHash = ""; // 지금 화면에 보이는 주소 (저장 안 된 실험안 경고에서 취소하면 여기로 되돌린다)
+
   function route() {
     if (!currentUser) return;
+    shownHash = location.hash;
     const [rawSection, rawTab] = location.hash.replace(/^#\/?/, "").split("/");
     const section = SECTIONS[rawSection] ? rawSection : "home";
     const tabs = window.ImagePage.TABS;
@@ -194,7 +200,16 @@
     window.scrollTo(0, 0);
   }
 
-  window.addEventListener("hashchange", route);
+  // 저장하지 않은 실험안이 있는데 다른 메뉴·탭으로 가려 하면, 주소를 되돌리고 경고 창을 띄운다.
+  // 벗어나겠다고 하면 그때 이동한다.
+  window.addEventListener("hashchange", () => {
+    if (!window.ImagePage.hasUnsaved()) return route();
+    const target = location.hash;
+    history.replaceState(null, "", location.pathname + location.search + shownHash);
+    window.ImagePage.guardLeave(() => {
+      location.hash = target;
+    });
+  });
 
   try {
     const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");

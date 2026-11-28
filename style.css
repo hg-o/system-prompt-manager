@@ -846,11 +846,11 @@ body.is-app .bg-blob { display: none; }
   color: #fff;
   font-size: 11px;
 }
-.status-step--design.is-active .status-step__no { background: #8b5cf6; }
-.status-step--draft.is-active .status-step__no { background: #6b7280; }
-.status-step--testing.is-active .status-step__no { background: #f97316; }
-.status-step--done.is-active .status-step__no { background: #3b82f6; }
-.status-step--final.is-active .status-step__no { background: var(--ink); }
+.status-step--design.is-current .status-step__no { background: #8b5cf6; }
+.status-step--draft.is-current .status-step__no { background: #6b7280; }
+.status-step--testing.is-current .status-step__no { background: #f97316; }
+.status-step--done.is-current .status-step__no { background: #3b82f6; }
+.status-step--final.is-current .status-step__no { background: var(--ink); }
 .status-hint { margin: 8px 0 20px; font-size: 13px; color: var(--muted); }
 .status-row { margin-bottom: 20px; }
 .status-error { margin: -10px 0 18px; }
@@ -988,6 +988,76 @@ body.is-app .bg-blob { display: none; }
 .empty-state--sm { padding: 28px 16px; }
 .design-summary__count { flex: 0 0 auto; font-size: 12.5px; color: var(--subtle); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* 상태바: 지나온 단계 ✓, 진행 중인 단계는 색, 보고 있는 단계는 흰 바탕 */
+.status-step.is-done { color: var(--text); }
+.status-step.is-done .status-step__no { background: #10b981; }
+.status-step.is-current { color: var(--ink); }
+.frozen-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.frozen-chip svg { width: 13px; height: 13px; }
+.design-error { margin: -6px 0 12px; }
+
+/* ---------- 실험안 작성 페이지 ---------- */
+.badge-temp, .badge-new { padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.badge-temp { background: #fff4e5; color: #c2410c; border: 1px solid #fed7aa; }
+.badge-new { background: #e8f0ff; color: #1d4ed8; }
+.gcard__tags { flex-wrap: wrap; right: 12px; }
+.gcard__tags .badge-temp { background: #f97316; color: #fff; border-color: transparent; }
+.exp__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.exp__note { flex: 1; margin: 0; font-size: 13px; color: var(--muted); }
+.exp__note.is-error { color: var(--danger); }
+.section-error { margin: -4px 0 12px; }
+
+/* ---------- 의견수렴중: 최종 선택 모드 ---------- */
+.pick-guide {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #ecfdf3;
+  color: #047a41;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.gcard.is-pickable { border-style: dashed; border-color: #b9c0ca; }
+.gcard.is-pickable:hover { border-color: var(--green); }
+.gcard.is-chosen { border: 2px solid var(--green); box-shadow: 0 0 0 4px rgba(0, 224, 116, .18); }
+.gcard__check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, .35);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+.gcard.is-chosen .gcard__check { background: var(--green); }
+
+/* ---------- 확인 창 ---------- */
+.modal__panel--confirm { max-width: 440px; padding-top: 52px; }
+.confirm-message { margin: 0; font-size: 15px; line-height: 1.65; color: var(--text); white-space: pre-line; word-break: keep-all; }
 
 /* ---------- 삭제 ---------- */
 .version-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }

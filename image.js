@@ -3,12 +3,17 @@
 // 데이터는 메모리에만 있다. 새로고침하면 샘플 데이터로 돌아간다.
 // 실제 구현에서는 아래 state 구조를 API 로 읽고 쓰면 된다 (HANDOFF.md 참고).
 //
-// 버전 상태 흐름: 실험 설계(design) → 실험안 작성(draft) → 의견수렴중(testing) → 실험완료(done) → 최종(final)
-//   실험 설계   실험 설계안을 여러 개 올린다 ('+ 실험 설계안' → 파일 첨부 / 직접 작성). 목록에서 대표 설계안을 고른다
-//   실험안 작성 실험안(A~J) 추가·삭제·작성
-//   의견수렴중      갤러리 카드 보기(이미지 크게 + 제목·개선 목적·투표). 카드를 누르면 전체 내용. 투표(이유 필수), 최종 선택(★)
-//   실험완료    ★ 실험안을 Final 로 복제해 다듬고 '최종 확정'
-//   최종        모두 읽기 전용. '새 버전으로 사본 생성'만 가능
+// 버전 진행 단계(status)는 앞으로만 간다:
+//   실험 설계(design) → 실험안 작성(draft) → 의견수렴중(testing) → 실험완료(done) → 최종(final)
+//
+//   실험 설계    실험 설계안을 여러 개 올린다 ('+ 실험 설계안' → 파일 첨부 / 직접 작성). 목록에서 대표 설계안을 고른다
+//   실험안 작성  실험안(A~J)을 추가·작성(임시저장 / 저장)·삭제. '실험안 후보 확정' → 의견수렴중
+//   의견수렴중   갤러리 카드에서 투표(이유 필수). '최종 선택' → 카드 고르기 → '확정' → 실험완료 (최종안 사본 Vn-Final 생성)
+//   실험완료     Vn-Final 을 다듬고 '최종 확정' → 최종
+//   최종         모두 읽기 전용. '새 버전으로 사본 생성'만 가능
+//
+// 상태바에서 지나온 단계를 누르면 그 단계 화면을 볼 수 있다 (보는 단계 = view).
+// 의견수렴중이 되면 실험 설계·실험안 작성은 보기 전용이 되고, 지나간 단계는 모두 보기 전용이다.
 //
 // 버전·실험안을 삭제하면 번호를 다시 매긴다 (V1 삭제 → V2 가 V1, 실험 B 삭제 → C 가 B).
 (function () {
@@ -29,6 +34,11 @@
   const DELETE_PHRASE = "Delete This Version"; // 삭제 확인 창에 직접 입력해야 하는 문구
   const IMAGE_EXT_RE = /\.(png|jpe?g)$/i;
   const IMAGE_TYPES = ["image/png", "image/jpeg"];
+  // 실험 설계안 파일: html, pptx, pdf, word 만. 용량 제한 없음
+  const DESIGN_EXT_RE = /\.(html?|pptx|pdf|docx?)$/i;
+  const DESIGN_ACCEPT = ".html,.htm,.pptx,.pdf,.doc,.docx";
+  const UNSAVED_MESSAGE =
+    "저장되지 않은 실험안이 있습니다. 페이지에서 벗어나시면 작성된 내용이 사라질 수 있습니다. 페이지에서 벗어나시겠습니까?";
 
   const STATUSES = [
     { key: "design", label: "실험 설계" },
@@ -37,6 +47,7 @@
     { key: "done", label: "실험완료" },
     { key: "final", label: "최종" },
   ];
+  const stageIdx = (key) => STATUSES.findIndex((s) => s.key === key);
 
   const today = () => new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD
   const esc = (s) =>
@@ -44,18 +55,11 @@
 
   // ---------- 복제 ----------
   // 이미지 url 은 원본과 같이 쓴다 (프로토타입이라 blob 을 따로 해제하지 않는다)
-  function copyExp(e, letter = e.letter) {
-    return {
-      letter,
-      title: e.title,
-      purpose: e.purpose,
-      format: e.format,
-      example: e.example,
-      images: e.images.map((img) => ({ ...img })),
-      votes: [],
-    };
-  }
+  // 실험안: { letter, title, purpose, format, example, images, votes, saved: "temp"(임시저장) | "saved"(저장) }
+  const cloneExp = (e) => ({ ...e, images: e.images.map((img) => ({ ...img })), votes: e.votes.map((x) => ({ ...x })) });
+  const copyExp = (e, letter = e.letter) => ({ ...cloneExp(e), letter, votes: [], saved: "saved" });
   const makeFinal = (e) => ({ ...copyExp(e, FINAL), source: e.letter });
+
   // 실험 설계안: { id, type: "file" | "text", createdAt, file?: { name, url }, title?, purpose?, body? }
   let designSeq = 0;
   const newDesignId = () => `d${++designSeq}`;
@@ -92,6 +96,7 @@
       example: `[샘플] ${id} 프롬프트 예시 전문이 여기에 들어갑니다.`,
       images: Array.from({ length: imageCount }, (_, i) => sampleImage(hue + i * 18, `${id} #${i + 1}`)),
       votes,
+      saved: "saved",
     };
   }
 
@@ -105,7 +110,7 @@
     v1final.title = `[샘플] ${tabLabel} V1 최종본`;
     v1final.purpose = "[샘플] V1-A를 바탕으로 문구를 다듬은 최종본입니다.";
 
-    const sampleText = `[샘플] ${tabLabel} 실험 설계안 파일입니다.`;
+    const sampleText = `<!doctype html><meta charset="utf-8"><title>[샘플] ${tabLabel} 실험 설계안</title><p>[샘플] ${tabLabel} 실험 설계안 파일입니다.</p>`;
     const v1design = {
       id: newDesignId(),
       type: "text",
@@ -128,7 +133,7 @@
       id: newDesignId(),
       type: "file",
       createdAt: "2026-11-05",
-      file: { name: `[샘플] ${tabLabel} 실험 설계안.txt`, url: "data:text/plain;charset=utf-8," + encodeURIComponent(sampleText) },
+      file: { name: `[샘플] ${tabLabel} 실험 설계안.html`, url: "data:text/html;charset=utf-8," + encodeURIComponent(sampleText) },
     };
 
     return [
@@ -160,50 +165,129 @@
           ]),
           sampleExperiment(tabLabel, 2, "C", hue + 160, 1),
         ],
-        finalLetter: "B",
+        finalLetter: null, // 의견수렴중: 아직 최종안을 고르지 않았다
         final: null,
       },
     ];
   }
 
-  // tabKey → { versions: [...], selected: 버전 index | null(최신), exp: 보고 있는 실험 letter | null(전체) }
-  const state = Object.fromEntries(TABS.map((t, i) => [t.key, { versions: seed(t.label, 140 + i * 70), selected: null, exp: null }]));
+  // tabKey → { versions, selected: 버전 index | null(최신), view: 보고 있는 단계 | null(진행 단계), exp: 열어 본 실험 letter | null(전체보기) }
+  const state = Object.fromEntries(
+    TABS.map((t, i) => [t.key, { versions: seed(t.label, 140 + i * 70), selected: null, view: null, exp: null }])
+  );
 
   // ---------- 화면 ----------
-  // { container, tab, canEdit, user, openModal, closeModal, imgError, statusError, voteDraft, hero }
+  // ctx: { container, tab, canEdit, user, openModal, closeModal } + 화면에만 있는 임시 상태
+  //   editor      실험안 작성 페이지 { isNew, dirty, data(작업 사본), error, note }
+  //   picking     의견수렴중 '최종 선택' 모드 { letter | null }
+  //   voteDraft   투표 이유 입력 { letter, text, error }
+  //   designMenu / designForm / designError   실험 설계안 추가 메뉴 / 직접 작성 폼 / 파일 형식 오류
   let ctx = null;
 
   const tabState = () => state[ctx.tab];
   const currentIndex = () => tabState().selected ?? tabState().versions.length - 1;
   const currentVersion = () => tabState().versions[currentIndex()];
-  const findExp = (letter) =>
-    letter === FINAL ? currentVersion().final : currentVersion().experiments.find((e) => e.letter === letter);
-
-  // 상태별 권한 (Viewer 는 투표만 가능)
-  const status = () => currentVersion().status;
-  const can = {
-    editDesign: () => ctx.canEdit && status() === "design",
-    editExp: () => ctx.canEdit && (status() === "draft" || status() === "testing"),
-    editFinal: () => ctx.canEdit && status() === "done",
-    addExp: () => ctx.canEdit && status() === "draft",
-    pickFinal: () => ctx.canEdit && status() === "testing",
-    vote: () => !!ctx.user && status() === "testing",
+  // 보고 있는 단계. 진행 단계보다 뒤는 볼 수 없다
+  const viewOf = (v) => {
+    const view = tabState().view;
+    return view && stageIdx(view) <= stageIdx(v.status) ? view : v.status;
   };
-  const canEditCard = (e) => (e.letter === FINAL ? can.editFinal() : can.editExp());
+  const findExp = (letter) => {
+    if (letter === FINAL) return currentVersion().final;
+    if (ctx.editor) return ctx.editor.data;
+    return currentVersion().experiments.find((e) => e.letter === letter);
+  };
+
+  // 단계별 권한. 지나간 단계는 보기 전용이고, 의견수렴중부터는 실험 설계·실험안 작성도 보기 전용이다. (Viewer 는 투표만 가능)
+  const at = (view, ...statuses) => {
+    const v = currentVersion();
+    return !!v && viewOf(v) === view && statuses.includes(v.status);
+  };
+  const can = {
+    editDesign: () => ctx.canEdit && at("design", "design", "draft"),
+    editDraft: () => ctx.canEdit && at("draft", "draft"),
+    vote: () => !!ctx.user && at("testing", "testing"),
+    pickFinal: () => ctx.canEdit && at("testing", "testing"),
+    editFinal: () => ctx.canEdit && at("done", "done"),
+  };
+  const isEditing = (e) => !!ctx.editor && ctx.editor.data === e;
+  const canEditCard = (e) => (e.letter === FINAL ? can.editFinal() : isEditing(e));
+  const hasUnsaved = () => !!(ctx && ctx.editor && ctx.editor.dirty);
 
   const TRASH =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>';
   const CHEVRON =
     '<svg class="select-wrap__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>';
+  const LOCK =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>';
+
+  const VIEW_DEFAULTS = {
+    imgError: null,
+    sectionError: null,
+    voteDraft: null,
+    hero: {},
+    editor: null,
+    picking: null,
+    designMenu: false,
+    designForm: null,
+    designError: null,
+  };
+
+  // 버전·탭·단계가 바뀔 때 화면에만 있는 임시 상태를 지운다
+  function resetView() {
+    Object.assign(ctx, VIEW_DEFAULTS, { hero: {} });
+  }
 
   function mount(container, options) {
     const first = !ctx || ctx.container !== container;
     if (ctx && ctx.tab !== options.tab) resetView();
-    ctx = { imgError: null, statusError: null, voteDraft: null, hero: {}, designMenu: false, designForm: null, designExpanded: false, ...ctx, ...options, container };
+    ctx = { ...VIEW_DEFAULTS, hero: {}, ...ctx, ...options, container };
     if (first) bind(container);
     render();
   }
 
+  // ---------- 확인 창 ----------
+  const confirmModal = document.getElementById("confirm-modal");
+  const confirmOk = document.getElementById("confirm-ok");
+  let pendingConfirm = null;
+
+  function confirmBox(message, onOk, { okLabel = "확인", danger = false } = {}) {
+    document.getElementById("confirm-message").textContent = message;
+    confirmOk.textContent = okLabel;
+    confirmOk.className = `btn ${danger ? "btn--danger" : "btn--primary"}`;
+    pendingConfirm = onOk;
+    ctx.openModal(confirmModal);
+  }
+
+  confirmOk.addEventListener("click", () => {
+    const run = pendingConfirm;
+    pendingConfirm = null;
+    ctx.closeModal(confirmModal);
+    if (run) run();
+  });
+
+  // 저장하지 않은 실험안이 있으면 경고하고, 벗어나겠다고 하면 작업 내용을 버린 뒤 proceed 를 실행한다
+  function guardLeave(proceed) {
+    if (!hasUnsaved()) return proceed();
+    confirmBox(
+      UNSAVED_MESSAGE,
+      () => {
+        ctx.editor = null;
+        tabState().exp = null;
+        proceed();
+      },
+      { okLabel: "벗어나기", danger: true }
+    );
+  }
+
+  // 새로고침·창 닫기: 브라우저 기본 경고창이 뜬다 (문구는 브라우저가 정한다)
+  window.addEventListener("beforeunload", (e) => {
+    if (!hasUnsaved()) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+
+  // ---------- 공통 조각 ----------
   function field({ label, key, value, exp, rows = 3, max, single, editable, placeholder }) {
     const attrs = [
       `data-field="${key}"`,
@@ -219,27 +303,32 @@
     return `<label class="vfield"><span class="vfield__label">${label}${counter}</span>${control}</label>`;
   }
 
+  // 상태바: 지나온 단계(✓)와 진행 중인 단계는 눌러서 볼 수 있다. 다음 단계로는 각 단계의 확정 버튼으로만 넘어간다.
+  // (예외: 실험 설계 → 실험안 작성은 상태바에서 바로 넘어간다)
   function statusRow(v) {
-    const locked = !ctx.canEdit || v.status === "final";
+    const sIdx = stageIdx(v.status);
+    const view = viewOf(v);
     const steps = STATUSES.map((s, i) => {
-      const active = s.key === v.status;
-      // '최종'은 직접 고를 수 없고, 실험완료에서 '최종 확정'을 눌러야 된다
-      const disabled = locked || s.key === "final";
-      const title = s.key === "final" && v.status !== "final" ? ` title="실험완료 상태에서 '최종 확정'을 누르면 최종이 됩니다."` : "";
-      return `<button type="button" class="status-step status-step--${s.key}${active ? " is-active" : ""}" role="radio" aria-checked="${active}"
-        data-action="set-status" data-status="${s.key}" ${disabled ? "disabled" : ""}${title}><span class="status-step__no">${i + 1}</span>${s.label}</button>`;
+      const viewing = s.key === view;
+      const reachable = i <= sIdx || (v.status === "design" && s.key === "draft" && ctx.canEdit);
+      const cls = ["status-step", `status-step--${s.key}`, viewing ? "is-active" : "", i < sIdx ? "is-done" : "", i === sIdx ? "is-current" : ""]
+        .filter(Boolean)
+        .join(" ");
+      return `<button type="button" class="${cls}" data-action="go-stage" data-status="${s.key}" aria-current="${viewing ? "step" : "false"}" ${reachable ? "" : "disabled"}>
+        <span class="status-step__no">${i < sIdx ? "✓" : i + 1}</span>${s.label}</button>`;
     }).join("");
+    // 지나간 단계, 의견수렴중 이후의 실험 설계, 최종 = 보기 전용
+    const frozen = v.status === "final" || (view !== v.status && !(view === "design" && v.status === "draft"));
     return `
       <div class="status-row">
         <span class="status-row__label">상태</span>
-        <div class="status-steps" role="radiogroup" aria-label="V${v.no} 상태">${steps}</div>
-      </div>
-      ${ctx.statusError ? `<p class="field__error status-error">${esc(ctx.statusError)}</p>` : ""}`;
+        <div class="status-steps" aria-label="V${v.no} 상태">${steps}</div>
+        ${frozen ? `<span class="frozen-chip">${LOCK}보기 전용</span>` : ""}
+      </div>`;
   }
 
   // ---------- 실험 설계안 ----------
-  // 실험 설계 단계: '+ 실험 설계안' 버튼(파일 첨부 / 직접 작성) + 목록(최신순, 대표 선택)
-  // 그 뒤 단계: 접힌 읽기 전용 목록
+  // '+ 실험 설계안' 버튼(파일 첨부 / 직접 작성) + 목록(최신순, 대표 선택). 의견수렴중부터는 목록만 보기 전용으로 나온다.
   function designForm(editable) {
     const f = ctx.designForm;
     if (!f) return "";
@@ -305,48 +394,36 @@
   }
 
   function designBlock(v) {
-    if (v.status === "design") {
-      const editable = can.editDesign();
-      const menu = ctx.designMenu
-        ? `<div class="add-menu" role="menu">
-             <label class="add-menu__item" role="menuitem">
-               <input type="file" hidden data-action="add-design-file" />
-               <b>파일 첨부</b><span>설계안 파일을 올립니다</span>
-             </label>
-             <button type="button" class="add-menu__item" role="menuitem" data-action="design-write">
-               <b>직접 작성</b><span>제목·개선 목적·본문을 적습니다</span>
-             </button>
-           </div>`
-        : "";
-      return `
-        <div class="design">
-          ${
-            editable
-              ? `<div class="add-menu-wrap">
-                   <button type="button" class="btn btn--primary btn--sm" data-action="design-menu" aria-haspopup="menu" aria-expanded="${!!ctx.designMenu}">+ 실험 설계안</button>
-                   ${menu}
-                 </div>`
-              : ""
-          }
-          ${designForm(editable)}
-          ${designList(v, editable)}
-        </div>`;
-    }
-    const main = mainDesign(v);
+    const editable = can.editDesign();
+    const menu = ctx.designMenu
+      ? `<div class="add-menu" role="menu">
+           <label class="add-menu__item" role="menuitem">
+             <input type="file" hidden accept="${DESIGN_ACCEPT}" data-action="add-design-file" />
+             <b>파일 첨부</b><span>html, pptx, pdf, word 파일을 올립니다</span>
+           </label>
+           <button type="button" class="add-menu__item" role="menuitem" data-action="design-write">
+             <b>직접 작성</b><span>제목·개선 목적·본문을 적습니다</span>
+           </button>
+         </div>`
+      : "";
     return `
-      <details class="design-summary" ${ctx.designExpanded ? "open" : ""}>
-        <summary>
-          <span class="design-summary__label">실험 설계</span>
-          <span class="design-summary__title">${main ? esc(designTitle(main) || "제목 없음") : "대표 설계안 없음"}</span>
-          <span class="design-summary__count">설계안 ${v.designs.length}개</span>
-        </summary>
-        <div class="design-summary__body">
-          ${designForm(false)}
-          ${designList(v, false)}
-        </div>
-      </details>`;
+      <div class="design">
+        ${
+          editable
+            ? `<div class="add-menu-wrap">
+                 <button type="button" class="btn btn--primary btn--sm" data-action="design-menu" aria-haspopup="menu" aria-expanded="${!!ctx.designMenu}">+ 실험 설계안</button>
+                 ${menu}
+               </div>
+               <p class="field__error design-error">${esc(ctx.designError || "")}</p>`
+            : ""
+        }
+        ${designForm(editable)}
+        ${designList(v, editable)}
+      </div>`;
   }
 
+  // ---------- 투표 ----------
+  // 의견수렴중 화면에서만 나온다. 의견수렴이 마감된 뒤에는 기록만 보인다.
   function voteSection(e, compact) {
     const votes = e.votes || [];
     const canVote = can.vote();
@@ -390,8 +467,20 @@
       </div>`;
   }
 
-  function experimentCard(v, e) {
+  function voteSummary(v) {
+    const ranked = v.experiments.filter((e) => e.votes.length).sort((a, b) => b.votes.length - a.votes.length);
+    const top = ranked.length ? ranked[0].votes.length : 0;
+    const chips = ranked
+      .map((e) => `<span class="vote-chip${e.votes.length === top ? " is-top" : ""}">V${v.no}-${e.letter} <b>${e.votes.length}</b>표</span>`)
+      .join("");
+    return `<div class="vote-summary"><span class="vote-summary__label">투표 현황</span>${chips || `<span class="muted-sm">아직 투표가 없습니다.</span>`}</div>`;
+  }
+
+  // ---------- 실험안 카드 ----------
+  // 실험안 하나의 전체 내용. 실험안 작성 페이지(편집), 보기 전용 상세, Vn-Final 에 함께 쓴다.
+  function experimentCard(v, e, view) {
     const isFinalCopy = e.letter === FINAL;
+    const editing = isEditing(e);
     const editable = canEditCard(e);
     const isPicked = !isFinalCopy && v.finalLetter === e.letter;
     const id = `V${v.no}-${e.letter}`;
@@ -415,24 +504,31 @@
         : "";
     const imgError = ctx.imgError && ctx.imgError.letter === e.letter ? ctx.imgError.message : "";
 
-    const badges = isFinalCopy
-      ? `<span class="badge-source">V${v.no}-${e.source} 복제본</span>
-         ${v.status === "final" ? `<span class="badge-final">✔ 최종 확정</span>` : ""}`
-      : isPicked
-        ? `<span class="badge-final">★ 최종 선택</span>`
-        : "";
+    const badges = [];
+    if (isFinalCopy) {
+      badges.push(`<span class="badge-source">V${v.no}-${e.source} 복제본</span>`);
+      if (v.status === "final") badges.push(`<span class="badge-final">✔ 최종 확정</span>`);
+    } else {
+      if (isPicked) badges.push(`<span class="badge-final">★ 최종 선택</span>`);
+      if (editing && ctx.editor.isNew) badges.push(`<span class="badge-new">새 실험안</span>`);
+      else if (e.saved === "temp") badges.push(`<span class="badge-temp">임시 저장</span>`);
+    }
 
     const actions = [];
-    if (!isFinalCopy && can.pickFinal())
-      actions.push(
-        `<button type="button" class="btn btn--xs ${isPicked ? "btn--outline" : "btn--soft"}" data-action="toggle-final" data-exp="${e.letter}">${isPicked ? "선택 해제" : "최종 선택"}</button>`
-      );
-    if (!isFinalCopy && can.addExp())
+    if (editing && !ctx.editor.isNew)
       actions.push(
         `<button type="button" class="btn btn--danger-outline btn--xs" data-action="delete-exp" data-exp="${e.letter}">${TRASH}${id} 실험안 삭제</button>`
       );
     if (isFinalCopy && can.editFinal())
       actions.push(`<button type="button" class="btn btn--primary btn--xs" data-action="confirm-final">최종 확정</button>`);
+
+    const footer = editing
+      ? `<footer class="exp__footer">
+           <p class="exp__note${ctx.editor.error ? " is-error" : ""}">${esc(ctx.editor.error || ctx.editor.note || (ctx.editor.dirty ? "저장되지 않은 변경 사항이 있습니다." : ""))}</p>
+           <button type="button" class="btn btn--outline btn--sm" data-action="save-temp">임시저장</button>
+           <button type="button" class="btn btn--primary btn--sm" data-action="save-exp">저장</button>
+         </footer>`
+      : "";
 
     const cls = ["exp", isFinalCopy ? "exp--final-copy" : "", isPicked ? "is-final" : "", editable ? "" : "is-locked"].filter(Boolean).join(" ");
 
@@ -440,7 +536,7 @@
       <article class="${cls}" data-exp-card="${e.letter}">
         <header class="exp__head">
           <span class="exp__id">${id}</span>
-          ${badges}
+          ${badges.join("")}
           <div class="exp__actions">${actions.join("")}</div>
         </header>
         ${field({ label: "제목", key: "title", value: e.title, exp: e.letter, max: TITLE_MAX, single: true, editable })}
@@ -453,13 +549,17 @@
           <p class="field__error">${esc(imgError)}</p>
           ${editable ? `<p class="muted-sm">png, jpg, jpeg · 최대 ${MAX_IMAGES}장</p>` : ""}
         </div>
-        ${isFinalCopy || v.status === "draft" ? "" : voteSection(e)}
+        ${!isFinalCopy && view === "testing" ? voteSection(e) : ""}
+        ${footer}
       </article>`;
   }
 
-  // 의견수렴중 갤러리 카드: 이미지를 가장 크게, 그 아래 제목·개선 목적·투표. 카드를 누르면 전체 내용이 열린다.
-  function galleryCard(v, e) {
+  // 전체보기 갤러리 카드: 이미지를 가장 크게, 그 아래 제목·개선 목적. 의견수렴중에서는 투표도 나온다.
+  // 카드를 누르면 그 실험안의 전체 내용이 열린다. '최종 선택' 모드에서는 카드를 누르면 최종안으로 고른다.
+  function galleryCard(v, e, view) {
     const id = `V${v.no}-${e.letter}`;
+    const picking = view === "testing" && ctx.picking;
+    const chosen = picking && ctx.picking.letter === e.letter;
     const isPicked = v.finalLetter === e.letter;
     const count = e.images.length;
     const hi = Math.min(ctx.hero[e.letter] || 0, Math.max(count - 1, 0));
@@ -473,37 +573,32 @@
             )
             .join("")}</div>`
         : "";
+    const cls = ["gcard", isPicked ? "is-final" : "", picking ? "is-pickable" : "", chosen ? "is-chosen" : ""].filter(Boolean).join(" ");
+    const label = picking ? `${id}을(를) 최종안으로 선택` : `${id} 전체 내용 보기`;
 
     return `
-      <article class="gcard${isPicked ? " is-final" : ""}" data-exp-card="${e.letter}" data-action="open-exp" data-exp="${e.letter}" tabindex="0" aria-label="${id} 전체 내용 보기">
+      <article class="${cls}" data-exp-card="${e.letter}" data-action="open-exp" data-exp="${e.letter}" tabindex="0" aria-label="${label}" ${picking ? `aria-pressed="${!!chosen}"` : ""}>
         <div class="gcard__hero">
           ${hero ? `<img src="${esc(hero.url)}" alt="${esc(hero.name)}" />` : `<span class="gcard__noimg">등록된 이미지가 없습니다</span>`}
           <div class="gcard__tags">
             <span class="exp__id">${id}</span>
             ${isPicked ? `<span class="badge-final">★ 최종 선택</span>` : ""}
+            ${e.saved === "temp" ? `<span class="badge-temp">임시 저장</span>` : ""}
           </div>
+          ${picking ? `<span class="gcard__check" aria-hidden="true">${chosen ? "✓" : ""}</span>` : ""}
           ${count > 1 ? `<span class="gcard__count">${hi + 1} / ${count}</span>` : ""}
         </div>
         ${strip}
         <div class="gcard__body">
           <h3 class="gcard__title">${e.title ? esc(e.title) : `<span class="gcard__empty">제목 없음</span>`}</h3>
           <p class="gcard__purpose">${e.purpose ? esc(e.purpose) : `<span class="gcard__empty">개선 목적이 없습니다.</span>`}</p>
-          <span class="gcard__more">전체 내용 보기 ›</span>
+          <span class="gcard__more">${picking ? (chosen ? "최종안으로 선택됨" : "눌러서 최종안으로 선택") : "전체 내용 보기 ›"}</span>
         </div>
-        ${v.status === "testing" ? voteSection(e, true) : ""}
+        ${view === "testing" ? voteSection(e, true) : ""}
       </article>`;
   }
 
-  function voteSummary(v) {
-    if (v.status !== "testing") return "";
-    const ranked = v.experiments.filter((e) => e.votes.length).sort((a, b) => b.votes.length - a.votes.length);
-    const top = ranked.length ? ranked[0].votes.length : 0;
-    const chips = ranked
-      .map((e) => `<span class="vote-chip${e.votes.length === top ? " is-top" : ""}">V${v.no}-${e.letter} <b>${e.votes.length}</b>표</span>`)
-      .join("");
-    return `<div class="vote-summary"><span class="vote-summary__label">투표 현황</span>${chips || `<span class="muted-sm">아직 투표가 없습니다.</span>`}</div>`;
-  }
-
+  // ---------- 그리기 ----------
   function render() {
     const { versions } = tabState();
     const tabsHtml = `
@@ -529,27 +624,26 @@
     const v = versions[idx];
     const latest = versions.length - 1;
     const n = v.experiments.length;
+    const view = viewOf(v);
 
     const options = versions
-      .map(
-        (ver, i) =>
-          `<option value="${i}" ${i === idx ? "selected" : ""}>V${ver.no}${i === latest ? " (현재)" : ""}</option>`
-      )
+      .map((ver, i) => `<option value="${i}" ${i === idx ? "selected" : ""}>V${ver.no}${i === latest ? " (현재)" : ""}</option>`)
       .reverse()
       .join("");
     const addVersionOption = ctx.canEdit ? `<option value="${NEW}">＋ 새 버전 추가</option>` : "";
 
-    // 단계별로 보여주는 실험안
-    //   실험 설계        없음 (실험안 작성 전 단계. 뒤 단계에서 돌아와 실험안이 남아 있어도 보여주지 않는다)
-    //   실험안 작성·의견수렴중  전체 실험(갤러리 카드) ↔ 카드를 눌러 들어간 실험안 하나
-    //   실험완료·최종    Vn-Final 하나만 (A~J 는 데이터에 남지만 보여주지 않는다)
-    const inDesign = v.status === "design";
-    const finalOnly = v.status === "done" || v.status === "final";
+    // 보는 단계별 실험안
+    //   실험 설계               없음 (실험안 작성 전 단계)
+    //   실험안 작성·의견수렴중  전체보기(갤러리 카드) ↔ 카드를 눌러 들어간 실험안 하나
+    //   실험완료·최종           Vn-Final 하나만
+    const inDesign = view === "design";
+    const finalOnly = view === "done" || view === "final";
+    const editing = view === "draft" && ctx.editor;
     const cards = inDesign ? [] : finalOnly ? [v.final].filter(Boolean) : v.experiments;
-    const filter = !finalOnly && cards.some((e) => e.letter === tabState().exp) ? tabState().exp : null;
-    const shown = filter ? cards.filter((e) => e.letter === filter) : cards;
-    // 전체 보기 = 갤러리 카드 (실험안 작성에서는 투표 기능만 뺀다)
-    const gallery = !finalOnly && !filter;
+    const filter = !finalOnly && !editing && cards.some((e) => e.letter === tabState().exp) ? tabState().exp : null;
+    const shown = editing ? [ctx.editor.data] : filter ? cards.filter((e) => e.letter === filter) : cards;
+    const gallery = !finalOnly && !editing && !filter;
+    const picking = view === "testing" && ctx.picking;
 
     const headAction = ctx.canEdit
       ? `<div class="version-actions">
@@ -557,7 +651,20 @@
            <button type="button" class="btn btn--danger-outline btn--sm" data-action="delete-version" title="V${v.no} 버전과 그 안의 실험안을 모두 삭제합니다">${TRASH}V${v.no} 버전 전체 삭제</button>
          </div>`
       : "";
-    const emptyText = v.status === "draft" && ctx.canEdit ? "아직 실험안이 없습니다. '+ 실험 추가'로 실험안을 만들어 주세요." : "실험이 없습니다.";
+
+    // 전체보기 오른쪽 버튼
+    let sectionActions = "";
+    if (gallery && can.editDraft())
+      sectionActions = `
+        <button type="button" class="btn btn--outline btn--sm" data-action="add-exp" ${n >= LETTERS.length ? "disabled" : ""}>+ 실험안 추가</button>
+        <button type="button" class="btn btn--primary btn--sm" data-action="confirm-candidates">실험안 후보 확정</button>`;
+    else if (gallery && can.pickFinal())
+      sectionActions = picking
+        ? `<button type="button" class="btn btn--outline btn--sm" data-action="pick-cancel">취소</button>
+           <button type="button" class="btn btn--primary btn--sm" data-action="pick-confirm" ${ctx.picking.letter ? "" : "disabled"}>확정</button>`
+        : `<button type="button" class="btn btn--primary btn--sm" data-action="pick-start" ${n ? "" : "disabled"}>최종 선택</button>`;
+
+    const emptyText = can.editDraft() ? "아직 실험안이 없습니다. '+ 실험안 추가'로 실험안을 만들어 주세요." : "실험안이 없습니다.";
 
     ctx.container.innerHTML = `${tabsHtml}
 
@@ -580,30 +687,26 @@
           ${headAction}
         </div>
         ${statusRow(v)}
-        ${designBlock(v)}
+        ${inDesign ? designBlock(v) : ""}
       </section>
 
       <section class="exp-section" ${inDesign ? "hidden" : ""}>
         <div class="exp-section__head">
           <div class="exp-section__title">
-            ${filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">← 전체보기</button>` : ""}
+            ${editing || filter ? `<button type="button" class="btn btn--soft btn--sm" data-action="show-all-exp">← 전체보기</button>` : ""}
             <h2>${finalOnly ? "최종안" : `실험안 <span class="counter">${n}/${LETTERS.length}</span>`}</h2>
           </div>
-          <div class="exp-section__actions">
-            ${
-              can.addExp()
-                ? `<button type="button" class="btn btn--outline btn--sm" data-action="add-exp" ${n >= LETTERS.length ? "disabled" : ""}>+ 실험 추가</button>`
-                : ""
-            }
-          </div>
+          <div class="exp-section__actions">${sectionActions}</div>
         </div>
-        ${voteSummary(v)}
-        ${cards.length === 0 ? `<div class="empty-state">${emptyText}</div>` : ""}
-        <div class="${gallery ? "exp-gallery" : "exp-list"}">${shown.map((e) => (gallery ? galleryCard(v, e) : experimentCard(v, e))).join("")}</div>
+        ${ctx.sectionError ? `<p class="field__error section-error">${esc(ctx.sectionError)}</p>` : ""}
+        ${picking && gallery ? `<p class="pick-guide">최종안으로 확정할 실험안 카드를 누른 뒤 '확정'을 눌러 주세요.</p>` : ""}
+        ${view === "testing" ? voteSummary(v) : ""}
+        ${shown.length === 0 ? `<div class="empty-state">${emptyText}</div>` : ""}
+        <div class="${gallery ? "exp-gallery" : "exp-list"}">${shown.map((e) => (gallery ? galleryCard(v, e, view) : experimentCard(v, e, view))).join("")}</div>
       </section>`;
 
     ctx.imgError = null;
-    ctx.statusError = null;
+    ctx.sectionError = null;
     ctx.container.querySelectorAll("textarea").forEach(autoGrow);
   }
 
@@ -620,13 +723,28 @@
     if (el) el.textContent = v.updatedAt;
   }
 
-  // 버전·탭·상태가 바뀔 때 화면에만 있는 임시 상태를 지운다
-  function resetView() {
-    ctx.voteDraft = null;
-    ctx.hero = {};
-    ctx.designMenu = false;
-    ctx.designForm = null;
-    ctx.designExpanded = false;
+  // 실험안 내용이 바뀌었을 때: 작성 페이지면 '저장 필요' 표시만 하고, Vn-Final 이면 바로 반영한다
+  function markChanged(e) {
+    if (!isEditing(e)) return touch();
+    const ed = ctx.editor;
+    ed.dirty = true;
+    ed.error = "";
+    ed.note = "";
+    const note = ctx.container.querySelector(".exp__note");
+    if (note) {
+      note.textContent = "저장되지 않은 변경 사항이 있습니다.";
+      note.classList.remove("is-error");
+    }
+  }
+
+  // ---------- 버전 ----------
+  function selectVersion(index) {
+    const ts = tabState();
+    ts.selected = index === null || index === ts.versions.length - 1 ? null : index;
+    ts.view = null;
+    ts.exp = null;
+    resetView();
+    render();
   }
 
   function addVersion(fields) {
@@ -641,10 +759,7 @@
       final: null,
       ...fields,
     });
-    tabState().selected = null;
-    tabState().exp = null;
-    resetView();
-    render();
+    selectVersion(null);
     window.scrollTo(0, 0);
   }
 
@@ -654,46 +769,109 @@
     addVersion({ designs: [], mainDesign: null, experiments: [] });
   }
 
-  // 실험안 영역의 "+ 실험 추가" (실험안 작성 단계에서만)
-  function addExperiment() {
-    const v = currentVersion();
-    const next = LETTERS[v.experiments.length]; // 실험안은 항상 A 부터 빈틈없이 이어진다
-    if (!can.addExp() || !next) return render();
-    v.experiments.push({ letter: next, title: "", purpose: "", format: "", example: "", images: [], votes: [] });
-    tabState().exp = next; // 새 실험안을 바로 작성할 수 있게 그 실험안의 전체 내용을 연다
-    touch();
+  // ---------- 단계 이동 ----------
+  // 상태바: 지나온 단계는 보기만 바꾼다. 실험 설계 → 실험안 작성만 여기서 진행 단계를 넘긴다.
+  function goStage(v, key) {
+    const ts = tabState();
+    if (stageIdx(key) <= stageIdx(v.status)) ts.view = key === v.status ? null : key;
+    else if (v.status === "design" && key === "draft" && ctx.canEdit) advance(v, "draft");
+    else return;
+    ts.exp = null;
+    resetView();
     render();
-    const card = ctx.container.querySelector(`[data-exp-card="${next}"]`);
-    ctx.container.querySelector(".exp-section").scrollIntoView({ block: "start" });
-    card.querySelector('[data-field="title"]').focus({ preventScroll: true });
   }
 
-  function setStatus(v, next) {
-    if (!ctx.canEdit || v.status === "final" || next === "final" || next === v.status) return;
-    if (next === "testing" && !v.experiments.length) {
-      ctx.statusError = "실험안이 없습니다. 실험안 작성 단계에서 실험안을 먼저 만들어 주세요.";
-      return render();
-    }
-    if (next === "done") {
-      const picked = v.experiments.find((x) => x.letter === v.finalLetter);
-      if (!picked) {
-        ctx.statusError = "최종 선택된 실험안이 없습니다. 의견수렴중 상태에서 실험안 하나를 '최종 선택'해 주세요.";
-        return render();
-      }
-      if (!v.final) v.final = makeFinal(picked);
-      else if (v.final.source !== picked.letter) {
-        const ok = window.confirm(
-          `지금 V${v.no}-Final은 V${v.no}-${v.final.source}을(를) 복제한 것입니다.\n지우고 최종 선택된 V${v.no}-${picked.letter}(으)로 다시 만들까요?`
-        );
-        if (!ok) return;
-        v.final = makeFinal(picked);
-      }
-    }
+  function advance(v, next) {
     v.status = next;
+    tabState().view = null;
     tabState().exp = null;
     resetView();
     touch();
+  }
+
+  // ---------- 실험안 작성 ----------
+  // "+ 실험안 추가": 작성 페이지를 연다. 임시저장이나 저장을 해야 전체보기에 나온다.
+  function addExperiment() {
+    const v = currentVersion();
+    const next = LETTERS[v.experiments.length]; // 실험안은 항상 A 부터 빈틈없이 이어진다
+    if (!can.editDraft() || !next) return;
+    ctx.editor = {
+      isNew: true,
+      dirty: false,
+      error: "",
+      note: "",
+      data: { letter: next, title: "", purpose: "", format: "", example: "", images: [], votes: [], saved: null },
+    };
     render();
+    ctx.container.querySelector(".exp-section").scrollIntoView({ block: "start" });
+    ctx.container.querySelector('[data-exp-card] [data-field="title"]').focus({ preventScroll: true });
+  }
+
+  function openEditor(exp) {
+    ctx.editor = { isNew: false, dirty: false, error: "", note: "", data: cloneExp(exp) };
+    render();
+    ctx.container.querySelector(".exp-section").scrollIntoView({ block: "start" });
+  }
+
+  // mode: "temp"(임시저장: 작성 페이지에 머문다) | "saved"(저장: 전체보기로 돌아간다)
+  function saveEditor(mode) {
+    const ed = ctx.editor;
+    if (!ed || !can.editDraft()) return;
+    const v = currentVersion();
+    const d = ed.data;
+    if (mode === "saved" && !d.title.trim()) {
+      ed.error = "저장하려면 제목을 입력해 주세요. 아직 작성 중이면 임시저장을 눌러 주세요.";
+      render();
+      ctx.container.querySelector('[data-exp-card] [data-field="title"]').focus();
+      return;
+    }
+    d.saved = mode;
+    const snapshot = cloneExp(d);
+    const pos = v.experiments.findIndex((x) => x.letter === d.letter);
+    if (pos >= 0) v.experiments[pos] = snapshot;
+    else v.experiments.push(snapshot);
+    touch();
+    if (mode === "saved") {
+      ctx.editor = null;
+      tabState().exp = null;
+    } else {
+      Object.assign(ed, { isNew: false, dirty: false, error: "", note: "임시저장되었습니다." });
+    }
+    render();
+  }
+
+  // "실험안 후보 확정": 의견수렴중으로 넘어가고, 실험 설계·실험안 작성은 보기 전용이 된다
+  function confirmCandidates(v) {
+    if (!can.editDraft()) return;
+    const temps = v.experiments.filter((e) => e.saved === "temp").map((e) => `V${v.no}-${e.letter}`);
+    if (!v.experiments.length) ctx.sectionError = "실험안이 없습니다. '+ 실험안 추가'로 실험안을 먼저 만들어 주세요.";
+    else if (temps.length) ctx.sectionError = `임시 저장 상태인 실험안이 있습니다 (${temps.join(", ")}). 저장한 뒤 확정해 주세요.`;
+    if (ctx.sectionError) return render();
+    confirmBox(
+      `실험안 후보 ${v.experiments.length}개를 확정할까요?\n확정하면 '의견수렴중' 단계로 넘어가고, 실험 설계와 실험안은 더 이상 추가·수정할 수 없습니다.`,
+      () => {
+        advance(v, "testing");
+        render();
+      },
+      { okLabel: "후보 확정" }
+    );
+  }
+
+  // 의견수렴중 '최종 선택' → 카드 고르기 → '확정': 의견수렴을 마감하고 최종안의 사본(Vn-Final)을 실험완료 단계로 넘긴다
+  function confirmPick(v) {
+    const picked = ctx.picking && v.experiments.find((e) => e.letter === ctx.picking.letter);
+    if (!can.pickFinal() || !picked) return;
+    confirmBox(
+      `V${v.no}-${picked.letter}을(를) 최종안으로 확정할까요?\n확정하면 의견수렴이 마감되어 더 이상 투표하거나 최종안을 바꿀 수 없고, 사본(V${v.no}-Final)이 '실험완료' 단계로 넘어갑니다.`,
+      () => {
+        v.finalLetter = picked.letter;
+        v.final = makeFinal(picked);
+        advance(v, "done");
+        render();
+        window.scrollTo(0, 0);
+      },
+      { okLabel: "최종안 확정" }
+    );
   }
 
   // ---------- 삭제 (확인 문구 입력 + 번호 다시 매기기) ----------
@@ -736,7 +914,7 @@
       `<b>실험안 V${v.no}-${exp.letter} 하나만</b> 삭제됩니다.`,
       `V${v.no} 버전${rest ? `과 다른 실험안 ${rest}개` : ""}는 그대로 남습니다.`,
     ];
-    const next = v.experiments[v.experiments.indexOf(exp) + 1];
+    const next = v.experiments[v.experiments.findIndex((x) => x.letter === exp.letter) + 1];
     if (next) scope.push(`뒤 실험안 이름이 하나씩 앞당겨집니다. (V${v.no}-${next.letter} → V${v.no}-${exp.letter})`);
     return scope;
   }
@@ -760,29 +938,16 @@
     const ts = tabState();
     ts.versions = ts.versions.filter((x) => x !== v);
     ts.versions.forEach((x, i) => (x.no = i + 1));
-    ts.selected = null;
-    ts.exp = null;
-    resetView();
-    render();
+    selectVersion(null);
     window.scrollTo(0, 0);
   }
 
-  // 실험안을 지우고 남은 실험안을 A 부터 다시 매긴다. 최종 선택(★)과 Final 의 원본 표시도 따라 옮긴다.
+  // 실험안을 지우고 남은 실험안을 A 부터 다시 매긴다 (실험안 작성 단계에서만 지울 수 있다)
   function deleteExperiment(v, letter) {
     v.experiments = v.experiments.filter((x) => x.letter !== letter);
-    const moved = {};
-    v.experiments.forEach((x, i) => {
-      moved[x.letter] = LETTERS[i];
-      x.letter = LETTERS[i];
-    });
-    v.finalLetter = moved[v.finalLetter] ?? null;
-    if (v.final) {
-      if (moved[v.final.source]) v.final.source = moved[v.final.source];
-      else v.final = null; // 원본 실험안이 지워졌으면 Final 도 지운다
-    }
+    v.experiments.forEach((x, i) => (x.letter = LETTERS[i]));
     tabState().exp = null;
-    ctx.voteDraft = null;
-    ctx.hero = {};
+    resetView();
     touch();
     render();
   }
@@ -808,20 +973,11 @@
       if (!key || el.readOnly || !el.dataset.exp) return;
       const target = findExp(el.dataset.exp);
       target[key] = el.value;
-      touch();
+      markChanged(target);
       const counter = el.closest(".vfield").querySelector(".counter");
       if (counter && el.maxLength > 0) counter.textContent = `${el.value.length}/${el.maxLength}`;
       if (el.tagName === "TEXTAREA") autoGrow(el);
     });
-
-    // 접힌 실험 설계 목록의 펼침 상태를 다시 그려도 유지한다 (toggle 은 버블링하지 않아 capture 로 받는다)
-    container.addEventListener(
-      "toggle",
-      (e) => {
-        if (e.target.matches(".design-summary")) ctx.designExpanded = e.target.open;
-      },
-      true
-    );
 
     // 갤러리 카드는 Enter·Space 로도 열 수 있다
     container.addEventListener("keydown", (e) => {
@@ -833,22 +989,24 @@
     container.addEventListener("change", (e) => {
       const el = e.target;
       if (el.dataset.action === "select-version") {
-        if (el.value === NEW) return newVersion();
-        const i = Number(el.value);
-        tabState().selected = i === tabState().versions.length - 1 ? null : i;
-        tabState().exp = null;
-        resetView();
-        render();
+        const value = el.value;
+        render(); // 드롭다운 표시를 일단 되돌린다 (경고 창에서 취소할 수 있으므로)
+        guardLeave(() => (value === NEW ? newVersion() : selectVersion(Number(value))));
       } else if (el.dataset.action === "add-img") {
         addImages(el.dataset.exp, [...el.files]);
       } else if (el.dataset.action === "add-design-file") {
         const f = el.files[0];
         if (!f || !can.editDesign()) return;
+        ctx.designMenu = false;
+        if (!DESIGN_EXT_RE.test(f.name)) {
+          ctx.designError = "html, pptx, pdf, word(doc, docx) 파일만 올릴 수 있습니다.";
+          return render();
+        }
         const cv = currentVersion();
         const d = { id: newDesignId(), type: "file", createdAt: today(), file: { name: f.name, url: URL.createObjectURL(f) } };
         cv.designs.unshift(d); // 최신순
         if (!mainDesign(cv)) cv.mainDesign = d.id;
-        ctx.designMenu = false;
+        ctx.designError = null;
         touch();
         render();
       } else if (el.dataset.action === "main-design") {
@@ -868,6 +1026,7 @@
       const letter = el.dataset.exp;
 
       switch (el.dataset.action) {
+        // ----- 버전 -----
         case "new-version":
           newVersion();
           break;
@@ -880,6 +1039,16 @@
             onConfirm: () => deleteVersion(v),
           });
           break;
+        case "copy-version":
+          // 최종 버전의 실험 설계안과 실험안을 그대로 복제해 실험안 작성 단계의 새 버전을 만든다 (투표·최종 선택·Final 은 넘기지 않는다)
+          if (!ctx.canEdit || v.status !== "final") return;
+          addVersion({ status: "draft", designs: copyDesigns(v.designs), mainDesign: v.mainDesign, experiments: v.experiments.map((x) => copyExp(x)) });
+          break;
+        case "go-stage":
+          guardLeave(() => goStage(v, el.dataset.status));
+          break;
+
+        // ----- 실험 설계안 -----
         case "design-menu":
           if (!can.editDesign()) return;
           ctx.designMenu = !ctx.designMenu;
@@ -888,6 +1057,7 @@
         case "design-write":
           if (!can.editDesign()) return;
           ctx.designMenu = false;
+          ctx.designError = null;
           ctx.designForm = { id: null, title: "", purpose: "", body: "", error: "" };
           render();
           ctx.container.querySelector('[data-dfield="title"]').focus();
@@ -930,69 +1100,77 @@
         case "delete-design": {
           if (!can.editDesign()) return;
           const d = v.designs.find((x) => x.id === el.dataset.id);
-          if (!d || !window.confirm(`실험 설계안 "${designTitle(d)}"을(를) 삭제할까요?`)) return;
-          v.designs = v.designs.filter((x) => x !== d);
-          if (v.mainDesign === d.id) v.mainDesign = v.designs.length ? v.designs[0].id : null; // 대표가 지워지면 가장 최근 것을 대표로
-          if (ctx.designForm && ctx.designForm.id === d.id) ctx.designForm = null;
-          touch();
-          render();
+          if (!d) return;
+          confirmBox(
+            "정말 삭제하시겠습니까?",
+            () => {
+              v.designs = v.designs.filter((x) => x !== d);
+              if (v.mainDesign === d.id) v.mainDesign = v.designs.length ? v.designs[0].id : null; // 대표가 지워지면 가장 최근 것을 대표로
+              if (ctx.designForm && ctx.designForm.id === d.id) ctx.designForm = null;
+              touch();
+              render();
+            },
+            { okLabel: "삭제", danger: true }
+          );
           break;
         }
-        case "open-exp":
+
+        // ----- 실험안 -----
+        case "open-exp": {
+          const exp = v.experiments.find((x) => x.letter === letter);
+          if (!exp) return;
+          if (ctx.picking && can.pickFinal()) {
+            ctx.picking.letter = letter; // '최종 선택' 모드: 카드를 눌러 최종안을 고른다
+            return render();
+          }
+          if (can.editDraft()) return openEditor(exp);
           tabState().exp = letter;
           render();
           ctx.container.querySelector(".exp-section").scrollIntoView({ block: "start" });
+          break;
+        }
+        case "show-all-exp":
+          guardLeave(() => {
+            ctx.editor = null;
+            tabState().exp = null;
+            render();
+          });
           break;
         case "hero-img":
           ctx.hero[letter] = Number(el.dataset.index);
           render();
           break;
-        case "copy-version":
-          // 최종 버전의 실험 설계와 실험안을 그대로 복제해 실험안 작성 단계의 새 버전을 만든다 (투표·최종 선택·Final 은 넘기지 않는다)
-          if (!ctx.canEdit || v.status !== "final") return;
-          addVersion({ status: "draft", designs: copyDesigns(v.designs), mainDesign: v.mainDesign, experiments: v.experiments.map((x) => copyExp(x)) });
-          break;
-        case "set-status":
-          setStatus(v, el.dataset.status);
-          break;
-        case "confirm-final":
-          if (!can.editFinal()) return;
-          if (!window.confirm(`V${v.no}-Final을 최종으로 확정할까요?\n확정하면 V${v.no}의 모든 내용을 더 이상 고칠 수 없습니다.`)) return;
-          touch();
-          v.status = "final";
-          v.confirmedAt = today();
-          render();
-          break;
-        case "show-all-exp":
-          tabState().exp = null;
-          render();
-          break;
         case "add-exp":
           addExperiment();
           break;
-        case "toggle-final":
-          if (!can.pickFinal()) return;
-          v.finalLetter = v.finalLetter === letter ? null : letter;
-          touch();
-          render();
+        case "save-temp":
+          saveEditor("temp");
+          break;
+        case "save-exp":
+          saveEditor("saved");
+          break;
+        case "confirm-candidates":
+          confirmCandidates(v);
           break;
         case "delete-exp": {
-          if (!can.addExp()) return;
-          const exp = findExp(letter);
+          if (!can.editDraft() || !ctx.editor || ctx.editor.isNew) return;
+          const exp = ctx.editor.data;
           askDelete({
             kind: "exp",
-            target: `V${v.no}-${letter}${exp.title ? ` · ${exp.title}` : ""}`,
+            target: `V${v.no}-${exp.letter}${exp.title ? ` · ${exp.title}` : ""}`,
             scope: expDeleteScope(v, exp),
-            onConfirm: () => deleteExperiment(v, letter),
+            onConfirm: () => deleteExperiment(v, exp.letter),
           });
           break;
         }
-        case "remove-img":
-          if (!canEditCard(findExp(letter))) return;
-          findExp(letter).images.splice(Number(el.dataset.index), 1);
-          touch();
+        case "remove-img": {
+          const exp = findExp(letter);
+          if (!canEditCard(exp)) return;
+          exp.images.splice(Number(el.dataset.index), 1);
+          markChanged(exp);
           render();
           break;
+        }
         case "view-img": {
           const img = findExp(letter).images[Number(el.dataset.index)];
           document.getElementById("image-modal-img").src = img.url;
@@ -1001,6 +1179,8 @@
           ctx.openModal(document.getElementById("image-modal"));
           break;
         }
+
+        // ----- 의견수렴중: 투표, 최종 선택 -----
         case "vote-open":
           if (!can.vote()) return;
           ctx.voteDraft = { letter, text: "", error: "" };
@@ -1027,12 +1207,45 @@
         }
         case "unvote": {
           if (!can.vote()) return;
-          if (!window.confirm(`V${v.no}-${letter} 투표를 취소할까요? 남긴 의견도 함께 지워집니다.`)) return;
-          const exp = findExp(letter);
-          exp.votes = exp.votes.filter((x) => x.userId !== ctx.user.id);
-          render();
+          confirmBox(
+            `V${v.no}-${letter} 투표를 취소할까요? 남긴 의견도 함께 지워집니다.`,
+            () => {
+              const exp = findExp(letter);
+              exp.votes = exp.votes.filter((x) => x.userId !== ctx.user.id);
+              render();
+            },
+            { okLabel: "투표 취소", danger: true }
+          );
           break;
         }
+        case "pick-start":
+          if (!can.pickFinal()) return;
+          ctx.picking = { letter: null };
+          ctx.voteDraft = null;
+          render();
+          break;
+        case "pick-cancel":
+          ctx.picking = null;
+          render();
+          break;
+        case "pick-confirm":
+          confirmPick(v);
+          break;
+
+        // ----- 실험완료 -----
+        case "confirm-final":
+          if (!can.editFinal()) return;
+          confirmBox(
+            `V${v.no}-Final을 최종으로 확정할까요?\n확정하면 V${v.no}의 모든 내용을 더 이상 고칠 수 없습니다.`,
+            () => {
+              v.confirmedAt = today();
+              advance(v, "final");
+              render();
+              window.scrollTo(0, 0);
+            },
+            { okLabel: "최종 확정" }
+          );
+          break;
       }
     });
   }
@@ -1048,10 +1261,11 @@
     if (valid.length > room) messages.push(`이미지는 최대 ${MAX_IMAGES}장까지입니다. ${valid.length - room}장은 제외했습니다.`);
 
     accepted.forEach((f) => exp.images.push({ name: f.name, url: URL.createObjectURL(f) }));
-    if (accepted.length) touch();
+    if (accepted.length) markChanged(exp);
     ctx.imgError = messages.length ? { letter, message: messages.join(" ") } : null;
     render();
   }
 
-  window.ImagePage = { TABS, mount };
+  // hasUnsaved / guardLeave: 메뉴 이동·탭 이동·로그아웃 때 app.js 가 저장 안 된 실험안이 있는지 확인하는 데 쓴다
+  window.ImagePage = { TABS, mount, hasUnsaved, guardLeave };
 })();
