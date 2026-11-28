@@ -4,7 +4,7 @@
 // 실제 구현에서는 아래 state 구조를 API 로 읽고 쓰면 된다 (HANDOFF.md 참고).
 //
 // 버전 상태 흐름: 실험 설계(design) → 실험안 작성(draft) → 의견수렴중(testing) → 실험완료(done) → 최종(final)
-//   실험 설계   실험 설계안 작성 (파일(선택)·제목·개선 목적·본문)
+//   실험 설계   실험 설계안을 여러 개 올린다 ('+ 실험 설계안' → 파일 첨부 / 직접 작성). 목록에서 대표 설계안을 고른다
 //   실험안 작성 실험안(A~J) 추가·삭제·작성
 //   의견수렴중      갤러리 카드 보기(이미지 크게 + 제목·개선 목적·투표). 카드를 누르면 전체 내용. 투표(이유 필수), 최종 선택(★)
 //   실험완료    ★ 실험안을 Final 로 복제해 다듬고 '최종 확정'
@@ -37,7 +37,6 @@
     { key: "done", label: "실험완료" },
     { key: "final", label: "최종" },
   ];
-  const statusLabel = (key) => STATUSES.find((s) => s.key === key).label;
 
   const today = () => new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD
   const esc = (s) =>
@@ -57,14 +56,13 @@
     };
   }
   const makeFinal = (e) => ({ ...copyExp(e, FINAL), source: e.letter });
-  const emptyDesign = () => ({ file: null, title: "", purpose: "", body: "" });
-  const copyDesign = (d) => ({ ...d, file: d.file ? { ...d.file } : null });
-
-  function fileSize(bytes) {
-    if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
-    if (bytes >= 1024) return Math.round(bytes / 1024) + " KB";
-    return bytes + " B";
-  }
+  // 실험 설계안: { id, type: "file" | "text", createdAt, file?: { name, url }, title?, purpose?, body? }
+  let designSeq = 0;
+  const newDesignId = () => `d${++designSeq}`;
+  const copyDesigns = (list) => list.map((d) => ({ ...d, file: d.file ? { ...d.file } : null }));
+  const DESIGN_TYPES = { file: "파일 첨부", text: "직접 작성" };
+  const designTitle = (d) => (d.type === "file" ? d.file.name : d.title);
+  const mainDesign = (v) => v.designs.find((d) => d.id === v.mainDesign) || null;
 
   // ---------- 샘플 데이터 ----------
   function sampleImage(hue, text) {
@@ -108,10 +106,29 @@
     v1final.purpose = "[샘플] V1-A를 바탕으로 문구를 다듬은 최종본입니다.";
 
     const sampleText = `[샘플] ${tabLabel} 실험 설계안 파일입니다.`;
-    const sampleFile = {
-      name: `[샘플] ${tabLabel} 실험 설계안.txt`,
-      size: new Blob([sampleText]).size,
-      url: "data:text/plain;charset=utf-8," + encodeURIComponent(sampleText),
+    const v1design = {
+      id: newDesignId(),
+      type: "text",
+      createdAt: "2026-10-02",
+      file: null,
+      title: `[샘플] ${tabLabel} 기본 프롬프트 설계`,
+      purpose: `[샘플] ${tabLabel} 첫 버전입니다. 기준이 될 프롬프트를 정합니다.`,
+      body: `[샘플] 실험 설계 본문\n\n1. 배경\n2. 가설\n3. 실험 방법\n4. 평가 기준`,
+    };
+    const v2design = {
+      id: newDesignId(),
+      type: "text",
+      createdAt: "2026-11-03",
+      file: null,
+      title: `[샘플] ${tabLabel} 출력 형식 개선 설계`,
+      purpose: `[샘플] V1 최종본을 바탕으로 출력 형식을 다듬습니다.`,
+      body: `[샘플] 실험 설계 본문\n\n1. 배경: V1 결과물의 출력 형식이 일정하지 않음\n2. 가설: 제약 조건을 명시하면 형식이 안정된다\n3. 실험 방법: 실험안 3개(A~C)를 같은 입력으로 비교\n4. 평가 기준: 형식 준수, 이미지 품질`,
+    };
+    const v2file = {
+      id: newDesignId(),
+      type: "file",
+      createdAt: "2026-11-05",
+      file: { name: `[샘플] ${tabLabel} 실험 설계안.txt`, url: "data:text/plain;charset=utf-8," + encodeURIComponent(sampleText) },
     };
 
     return [
@@ -121,12 +138,8 @@
         createdAt: "2026-10-02",
         updatedAt: "2026-10-15",
         confirmedAt: "2026-10-15",
-        design: {
-          file: null,
-          title: `[샘플] ${tabLabel} 기본 프롬프트`,
-          purpose: `[샘플] ${tabLabel} 첫 버전입니다. 기준이 될 프롬프트를 정합니다.`,
-          body: `[샘플] 실험 설계 본문\n\n1. 배경\n2. 가설\n3. 실험 방법\n4. 평가 기준`,
-        },
+        designs: [v1design],
+        mainDesign: v1design.id,
         experiments: [v1a, v1b],
         finalLetter: "A",
         final: v1final,
@@ -137,12 +150,8 @@
         createdAt: "2026-11-03",
         updatedAt: "2026-11-24",
         confirmedAt: null,
-        design: {
-          file: sampleFile,
-          title: `[샘플] ${tabLabel} 출력 형식 개선`,
-          purpose: `[샘플] V1 최종본을 바탕으로 출력 형식을 다듬습니다.`,
-          body: `[샘플] 실험 설계 본문\n\n1. 배경: V1 결과물의 출력 형식이 일정하지 않음\n2. 가설: 제약 조건을 명시하면 형식이 안정된다\n3. 실험 방법: 실험안 3개(A~C)를 같은 입력으로 비교\n4. 평가 기준: 형식 준수, 이미지 품질`,
-        },
+        designs: [v2file, v2design], // 최신순
+        mainDesign: v2design.id,
         experiments: [
           sampleExperiment(tabLabel, 2, "A", hue + 20, 4, [sampleVote(0, "구도가 안정적입니다.", "2026-11-20")]),
           sampleExperiment(tabLabel, 2, "B", hue + 90, 2, [
@@ -189,20 +198,16 @@
 
   function mount(container, options) {
     const first = !ctx || ctx.container !== container;
-    if (ctx && ctx.tab !== options.tab) {
-      ctx.voteDraft = null;
-      ctx.hero = {};
-    }
-    ctx = { imgError: null, statusError: null, voteDraft: null, hero: {}, ...ctx, ...options, container };
+    if (ctx && ctx.tab !== options.tab) resetView();
+    ctx = { imgError: null, statusError: null, voteDraft: null, hero: {}, designMenu: false, designForm: null, designExpanded: false, ...ctx, ...options, container };
     if (first) bind(container);
     render();
   }
 
-  function field({ label, key, value, exp, design, rows = 3, max, single, editable, placeholder }) {
+  function field({ label, key, value, exp, rows = 3, max, single, editable, placeholder }) {
     const attrs = [
       `data-field="${key}"`,
       exp ? `data-exp="${exp}"` : "",
-      design ? "data-design" : "",
       placeholder && editable ? `placeholder="${esc(placeholder)}"` : "",
       max ? `maxlength="${max}"` : "",
       editable ? "" : "readonly",
@@ -212,22 +217,6 @@
       ? `<input class="input" type="text" ${attrs} value="${esc(value)}" />`
       : `<textarea class="input textarea" rows="${rows}" ${attrs}>${esc(value)}</textarea>`;
     return `<label class="vfield"><span class="vfield__label">${label}${counter}</span>${control}</label>`;
-  }
-
-  function statusHint(v) {
-    const id = `V${v.no}`;
-    switch (v.status) {
-      case "design":
-        return "실험 설계안을 작성합니다. 파일 첨부는 선택입니다. 다 쓰면 실험안 작성 단계로 넘깁니다.";
-      case "draft":
-        return "실험안(A~J)을 만들고 내용을 채웁니다. 카드를 누르면 그 실험안을 작성·삭제할 수 있습니다. 실험안은 이 단계에서만 추가·삭제할 수 있습니다.";
-      case "testing":
-        return "실험안마다 투표하고 이유를 남깁니다. 여러 실험안에 투표할 수 있습니다. 카드를 누르면 프롬프트까지 전체 내용이 보이고, 거기서 하나를 최종 선택한 뒤 실험완료로 넘깁니다.";
-      case "done":
-        return `최종 선택된 ${id}-${v.final.source}을(를) 복제한 ${id}-Final만 다룹니다. 다듬은 뒤 '최종 확정'을 누릅니다.`;
-      default:
-        return `최종 확정된 버전이라 고칠 수 없습니다. 고치려면 '새 버전으로 사본 생성'을 눌러 새 버전에서 고쳐 주세요.`;
-    }
   }
 
   function statusRow(v) {
@@ -245,51 +234,116 @@
         <span class="status-row__label">상태</span>
         <div class="status-steps" role="radiogroup" aria-label="V${v.no} 상태">${steps}</div>
       </div>
-      <p class="status-hint">${esc(statusHint(v))}</p>
       ${ctx.statusError ? `<p class="field__error status-error">${esc(ctx.statusError)}</p>` : ""}`;
   }
 
-  // 실험 설계: 실험 설계 단계에서는 입력 폼, 그 뒤 단계에서는 접힌 읽기 전용 요약
-  function designFile(d, editable) {
-    if (d.file)
-      return `<div class="file-chip">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>
-          <a href="${esc(d.file.url)}" download="${esc(d.file.name)}">${esc(d.file.name)}</a>
-          <span class="file-chip__size">${fileSize(d.file.size)}</span>
-          ${editable ? `<button type="button" class="file-chip__remove" data-action="remove-design-file" aria-label="파일 삭제">×</button>` : ""}
-        </div>`;
-    if (!editable) return `<p class="muted-sm">첨부된 파일이 없습니다.</p>`;
-    return `<label class="file-pick">
-        <input type="file" hidden data-action="add-design-file" />
-        <span class="btn btn--outline btn--sm">파일 선택</span>
-        <span class="muted-sm">파일 1개를 첨부할 수 있습니다.</span>
-      </label>`;
+  // ---------- 실험 설계안 ----------
+  // 실험 설계 단계: '+ 실험 설계안' 버튼(파일 첨부 / 직접 작성) + 목록(최신순, 대표 선택)
+  // 그 뒤 단계: 접힌 읽기 전용 목록
+  function designForm(editable) {
+    const f = ctx.designForm;
+    if (!f) return "";
+    const ro = editable ? "" : "readonly";
+    const heading = !editable ? "실험 설계안 보기" : f.id ? "실험 설계안 수정" : "실험 설계안 직접 작성";
+    return `
+      <div class="design-form">
+        <h3 class="design-form__title">${heading}</h3>
+        <label class="vfield">
+          <span class="vfield__label">제목${editable ? `<span class="counter">${f.title.length}/${TITLE_MAX}</span>` : ""}</span>
+          <input class="input" type="text" data-dfield="title" maxlength="${TITLE_MAX}" value="${esc(f.title)}" ${ro} />
+        </label>
+        <label class="vfield">
+          <span class="vfield__label">개선 목적</span>
+          <textarea class="input textarea" rows="3" data-dfield="purpose" ${ro}>${esc(f.purpose)}</textarea>
+        </label>
+        <label class="vfield">
+          <span class="vfield__label">본문</span>
+          <textarea class="input textarea" rows="10" data-dfield="body" ${ro}>${esc(f.body)}</textarea>
+        </label>
+        <p class="field__error">${esc(f.error || "")}</p>
+        <div class="design-form__actions">
+          <button type="button" class="btn btn--outline btn--sm" data-action="design-form-close">${editable ? "취소" : "닫기"}</button>
+          ${editable ? `<button type="button" class="btn btn--primary btn--sm" data-action="design-form-save">저장</button>` : ""}
+        </div>
+      </div>`;
+  }
+
+  function designList(v, editable) {
+    if (!v.designs.length) return `<div class="empty-state empty-state--sm">등록된 실험 설계안이 없습니다.</div>`;
+    const rows = v.designs
+      .map((d) => {
+        const isMain = d.id === v.mainDesign;
+        const title = designTitle(d) || "제목 없음";
+        const link =
+          d.type === "file"
+            ? `<a class="design-link" href="${esc(d.file.url)}" download="${esc(d.file.name)}">${esc(title)}</a>`
+            : `<button type="button" class="design-link" data-action="open-design" data-id="${d.id}">${esc(title)}</button>`;
+        return `
+          <tr class="${isMain ? "is-main" : ""}" data-design-row="${d.id}">
+            <td class="design-table__main">
+              <label class="main-pick">
+                <input type="radio" name="main-design-${v.no}" data-action="main-design" value="${d.id}" ${isMain ? "checked" : ""} ${editable ? "" : "disabled"} aria-label="${esc(title)}을(를) 대표 설계안으로 선택" />
+                ${isMain ? `<span class="badge-main">대표</span>` : ""}
+              </label>
+            </td>
+            <td><span class="type-chip type-chip--${d.type}">${DESIGN_TYPES[d.type]}</span></td>
+            <td class="design-table__title">${link}</td>
+            <td class="design-table__date">${d.createdAt}</td>
+            ${
+              editable
+                ? `<td class="design-table__del"><button type="button" class="icon-btn icon-btn--sm" data-action="delete-design" data-id="${d.id}" aria-label="${esc(title)} 삭제" title="삭제">${TRASH}</button></td>`
+                : ""
+            }
+          </tr>`;
+      })
+      .join("");
+    return `
+      <table class="design-table">
+        <thead><tr><th>대표 설계안</th><th>타입</th><th>제목</th><th>생성·업로드 일자</th>${editable ? `<th><span class="sr-only">삭제</span></th>` : ""}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
   }
 
   function designBlock(v) {
-    const d = v.design;
     if (v.status === "design") {
       const editable = can.editDesign();
+      const menu = ctx.designMenu
+        ? `<div class="add-menu" role="menu">
+             <label class="add-menu__item" role="menuitem">
+               <input type="file" hidden data-action="add-design-file" />
+               <b>파일 첨부</b><span>설계안 파일을 올립니다</span>
+             </label>
+             <button type="button" class="add-menu__item" role="menuitem" data-action="design-write">
+               <b>직접 작성</b><span>제목·개선 목적·본문을 적습니다</span>
+             </button>
+           </div>`
+        : "";
       return `
         <div class="design">
-          <div class="vfield">
-            <span class="vfield__label"><span>실험 설계안 파일 <span class="optional">(선택)</span></span></span>
-            ${designFile(d, editable)}
-          </div>
-          ${field({ label: "제목", key: "title", value: d.title, design: true, max: TITLE_MAX, single: true, editable })}
-          ${field({ label: "개선 목적", key: "purpose", value: d.purpose, design: true, rows: 3, editable })}
-          ${field({ label: "본문", key: "body", value: d.body, design: true, rows: 12, editable })}
+          ${
+            editable
+              ? `<div class="add-menu-wrap">
+                   <button type="button" class="btn btn--primary btn--sm" data-action="design-menu" aria-haspopup="menu" aria-expanded="${!!ctx.designMenu}">+ 실험 설계안</button>
+                   ${menu}
+                 </div>`
+              : ""
+          }
+          ${designForm(editable)}
+          ${designList(v, editable)}
         </div>`;
     }
-    const text = (t) => (t ? esc(t) : `<span class="gcard__empty">내용이 없습니다.</span>`);
+    const main = mainDesign(v);
     return `
-      <details class="design-summary">
-        <summary><span class="design-summary__label">실험 설계</span><span class="design-summary__title">${d.title ? esc(d.title) : "제목 없음"}</span></summary>
-        <dl class="design-summary__body">
-          <dt>실험 설계안 파일</dt><dd>${designFile(d, false)}</dd>
-          <dt>개선 목적</dt><dd>${text(d.purpose)}</dd>
-          <dt>본문</dt><dd>${text(d.body)}</dd>
-        </dl>
+      <details class="design-summary" ${ctx.designExpanded ? "open" : ""}>
+        <summary>
+          <span class="design-summary__label">실험 설계</span>
+          <span class="design-summary__title">${main ? esc(designTitle(main) || "제목 없음") : "대표 설계안 없음"}</span>
+          <span class="design-summary__count">설계안 ${v.designs.length}개</span>
+        </summary>
+        <div class="design-summary__body">
+          ${designForm(false)}
+          ${designList(v, false)}
+        </div>
       </details>`;
   }
 
@@ -479,7 +533,7 @@
     const options = versions
       .map(
         (ver, i) =>
-          `<option value="${i}" ${i === idx ? "selected" : ""}>V${ver.no} · ${statusLabel(ver.status)}${i === latest ? " (현재)" : ""}</option>`
+          `<option value="${i}" ${i === idx ? "selected" : ""}>V${ver.no}${i === latest ? " (현재)" : ""}</option>`
       )
       .reverse()
       .join("");
@@ -512,12 +566,9 @@
           <div class="version-meta">
             <div class="vpick">
               <span class="vpick__label">버전</span>
-              <div class="vpick__row">
-                <div class="select-wrap version-select">
-                  <select class="input select" data-action="select-version" aria-label="버전 선택">${addVersionOption}${options}</select>
-                  ${CHEVRON}
-                </div>
-                <span class="status-pill status-pill--${v.status}">${statusLabel(v.status)}</span>
+              <div class="select-wrap version-select">
+                <select class="input select" data-action="select-version" aria-label="버전 선택">${addVersionOption}${options}</select>
+                ${CHEVRON}
               </div>
             </div>
             <dl class="version-dates">
@@ -569,6 +620,15 @@
     if (el) el.textContent = v.updatedAt;
   }
 
+  // 버전·탭·상태가 바뀔 때 화면에만 있는 임시 상태를 지운다
+  function resetView() {
+    ctx.voteDraft = null;
+    ctx.hero = {};
+    ctx.designMenu = false;
+    ctx.designForm = null;
+    ctx.designExpanded = false;
+  }
+
   function addVersion(fields) {
     const versions = tabState().versions;
     versions.push({
@@ -583,18 +643,15 @@
     });
     tabState().selected = null;
     tabState().exp = null;
-    ctx.voteDraft = null;
-    ctx.hero = {};
+    resetView();
     render();
     window.scrollTo(0, 0);
-    const title = ctx.container.querySelector('[data-design][data-field="title"]');
-    if (title) title.focus({ preventScroll: true });
   }
 
   // 버전 드롭다운 맨 위 "새 버전 추가"
   function newVersion() {
     if (!ctx.canEdit) return render();
-    addVersion({ design: emptyDesign(), experiments: [] });
+    addVersion({ designs: [], mainDesign: null, experiments: [] });
   }
 
   // 실험안 영역의 "+ 실험 추가" (실험안 작성 단계에서만)
@@ -634,7 +691,7 @@
     }
     v.status = next;
     tabState().exp = null;
-    ctx.voteDraft = null;
+    resetView();
     touch();
     render();
   }
@@ -664,7 +721,7 @@
     const { versions } = tabState();
     const ids = v.experiments.map((e) => `V${v.no}-${e.letter}`);
     const votes = v.experiments.reduce((sum, e) => sum + e.votes.length, 0);
-    const parts = ["실험 설계", ids.length ? `실험안 ${ids.length}개 (${ids.join(", ")})` : "실험안 0개"];
+    const parts = [`실험 설계안 ${v.designs.length}개`, ids.length ? `실험안 ${ids.length}개 (${ids.join(", ")})` : "실험안 0개"];
     if (v.final) parts.push(`V${v.no}-Final`);
     if (votes) parts.push(`투표 ${votes}건`);
     const scope = [`<b>V${v.no} 버전 전체</b>가 삭제됩니다.`, `함께 삭제되는 것: ${esc(parts.join(", "))}`];
@@ -705,8 +762,7 @@
     ts.versions.forEach((x, i) => (x.no = i + 1));
     ts.selected = null;
     ts.exp = null;
-    ctx.voteDraft = null;
-    ctx.hero = {};
+    resetView();
     render();
     window.scrollTo(0, 0);
   }
@@ -739,15 +795,33 @@
         if (ctx.voteDraft) ctx.voteDraft.text = el.value;
         return autoGrow(el);
       }
+      // 실험 설계안 직접 작성 폼: 저장을 눌러야 반영된다
+      if (el.dataset.dfield) {
+        if (!ctx.designForm || el.readOnly) return;
+        ctx.designForm[el.dataset.dfield] = el.value;
+        const dCounter = el.closest(".vfield").querySelector(".counter");
+        if (dCounter) dCounter.textContent = `${el.value.length}/${el.maxLength}`;
+        if (el.tagName === "TEXTAREA") autoGrow(el);
+        return;
+      }
       const key = el.dataset.field;
-      if (!key || el.readOnly) return;
-      const target = el.dataset.exp ? findExp(el.dataset.exp) : currentVersion().design;
+      if (!key || el.readOnly || !el.dataset.exp) return;
+      const target = findExp(el.dataset.exp);
       target[key] = el.value;
       touch();
       const counter = el.closest(".vfield").querySelector(".counter");
       if (counter && el.maxLength > 0) counter.textContent = `${el.value.length}/${el.maxLength}`;
       if (el.tagName === "TEXTAREA") autoGrow(el);
     });
+
+    // 접힌 실험 설계 목록의 펼침 상태를 다시 그려도 유지한다 (toggle 은 버블링하지 않아 capture 로 받는다)
+    container.addEventListener(
+      "toggle",
+      (e) => {
+        if (e.target.matches(".design-summary")) ctx.designExpanded = e.target.open;
+      },
+      true
+    );
 
     // 갤러리 카드는 Enter·Space 로도 열 수 있다
     container.addEventListener("keydown", (e) => {
@@ -763,15 +837,23 @@
         const i = Number(el.value);
         tabState().selected = i === tabState().versions.length - 1 ? null : i;
         tabState().exp = null;
-        ctx.voteDraft = null;
-        ctx.hero = {};
+        resetView();
         render();
       } else if (el.dataset.action === "add-img") {
         addImages(el.dataset.exp, [...el.files]);
       } else if (el.dataset.action === "add-design-file") {
         const f = el.files[0];
         if (!f || !can.editDesign()) return;
-        currentVersion().design.file = { name: f.name, size: f.size, url: URL.createObjectURL(f) };
+        const cv = currentVersion();
+        const d = { id: newDesignId(), type: "file", createdAt: today(), file: { name: f.name, url: URL.createObjectURL(f) } };
+        cv.designs.unshift(d); // 최신순
+        if (!mainDesign(cv)) cv.mainDesign = d.id;
+        ctx.designMenu = false;
+        touch();
+        render();
+      } else if (el.dataset.action === "main-design") {
+        if (!can.editDesign()) return render();
+        currentVersion().mainDesign = el.value;
         touch();
         render();
       }
@@ -793,17 +875,69 @@
           if (!ctx.canEdit || !v) return;
           askDelete({
             kind: "version",
-            target: `V${v.no}${v.design.title ? ` · ${v.design.title}` : ""}`,
+            target: `V${v.no}${mainDesign(v) ? ` · ${designTitle(mainDesign(v))}` : ""}`,
             scope: versionDeleteScope(v),
             onConfirm: () => deleteVersion(v),
           });
           break;
-        case "remove-design-file":
+        case "design-menu":
           if (!can.editDesign()) return;
-          v.design.file = null;
+          ctx.designMenu = !ctx.designMenu;
+          render();
+          break;
+        case "design-write":
+          if (!can.editDesign()) return;
+          ctx.designMenu = false;
+          ctx.designForm = { id: null, title: "", purpose: "", body: "", error: "" };
+          render();
+          ctx.container.querySelector('[data-dfield="title"]').focus();
+          break;
+        case "open-design": {
+          const d = v.designs.find((x) => x.id === el.dataset.id);
+          if (!d) return;
+          ctx.designMenu = false;
+          ctx.designForm = { id: d.id, title: d.title, purpose: d.purpose, body: d.body, error: "" };
+          render();
+          ctx.container.querySelector(".design-form").scrollIntoView({ block: "nearest" });
+          break;
+        }
+        case "design-form-close":
+          ctx.designForm = null;
+          render();
+          break;
+        case "design-form-save": {
+          const f = ctx.designForm;
+          if (!can.editDesign() || !f) return;
+          const title = f.title.trim();
+          if (!title) {
+            f.error = "제목을 입력해 주세요.";
+            render();
+            ctx.container.querySelector('[data-dfield="title"]').focus();
+            return;
+          }
+          const existing = f.id && v.designs.find((x) => x.id === f.id);
+          if (existing) Object.assign(existing, { title, purpose: f.purpose, body: f.body });
+          else {
+            const d = { id: newDesignId(), type: "text", createdAt: today(), file: null, title, purpose: f.purpose, body: f.body };
+            v.designs.unshift(d); // 최신순
+            if (!mainDesign(v)) v.mainDesign = d.id;
+          }
+          ctx.designForm = null;
           touch();
           render();
           break;
+        }
+        case "delete-design": {
+          if (!can.editDesign()) return;
+          const d = v.designs.find((x) => x.id === el.dataset.id);
+          if (!d || !window.confirm(`실험 설계안 "${designTitle(d)}"을(를) 삭제할까요?`)) return;
+          v.designs = v.designs.filter((x) => x !== d);
+          if (v.mainDesign === d.id) v.mainDesign = v.designs.length ? v.designs[0].id : null; // 대표가 지워지면 가장 최근 것을 대표로
+          if (ctx.designForm && ctx.designForm.id === d.id) ctx.designForm = null;
+          touch();
+          render();
+          break;
+        }
         case "open-exp":
           tabState().exp = letter;
           render();
@@ -816,7 +950,7 @@
         case "copy-version":
           // 최종 버전의 실험 설계와 실험안을 그대로 복제해 실험안 작성 단계의 새 버전을 만든다 (투표·최종 선택·Final 은 넘기지 않는다)
           if (!ctx.canEdit || v.status !== "final") return;
-          addVersion({ status: "draft", design: copyDesign(v.design), experiments: v.experiments.map((x) => copyExp(x)) });
+          addVersion({ status: "draft", designs: copyDesigns(v.designs), mainDesign: v.mainDesign, experiments: v.experiments.map((x) => copyExp(x)) });
           break;
         case "set-status":
           setStatus(v, el.dataset.status);
