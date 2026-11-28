@@ -280,6 +280,26 @@
     if (run) run();
   });
 
+  // ---------- 토스트 ----------
+  // 화면 아래 가운데에 잠깐 떴다 사라지는 안내
+  const TOAST_MS = 2500;
+  let toastEl = null;
+  let toastTimer = null;
+
+  function toast(message) {
+    if (!toastEl) {
+      toastEl = document.createElement("div");
+      toastEl.className = "toast";
+      toastEl.setAttribute("role", "status");
+      toastEl.setAttribute("aria-live", "polite");
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = message;
+    toastEl.classList.add("is-shown");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("is-shown"), TOAST_MS);
+  }
+
   // 저장하지 않은 실험안이 있으면 경고하고, 벗어나겠다고 하면 작업 내용을 버린 뒤 proceed 를 실행한다
   function guardLeave(proceed) {
     if (!hasUnsaved()) return proceed();
@@ -343,12 +363,14 @@
 
   // ---------- 실험 설계안 ----------
   // '+ 실험 설계안' 버튼(파일 첨부 / 직접 작성) + 목록(최신순, 대표 선택). 의견수렴중부터는 목록만 보기 전용으로 나온다.
+  // 직접 작성한 설계안을 열거나 새로 쓸 때는 목록 대신 세부 페이지가 나오고, '← 목록으로'로 돌아간다.
   function designForm(editable) {
     const f = ctx.designForm;
     if (!f) return "";
     const ro = editable ? "" : "readonly";
     const heading = !editable ? "실험 설계안 보기" : f.id ? "실험 설계안 수정" : "실험 설계안 직접 작성";
     return `
+      <button type="button" class="btn btn--soft btn--sm design-back" data-action="design-form-close">← 목록으로</button>
       <div class="design-form">
         <h3 class="design-form__title">${heading}</h3>
         <label class="vfield">
@@ -364,10 +386,14 @@
           <textarea class="input textarea" rows="10" data-dfield="body" ${ro}>${esc(f.body)}</textarea>
         </label>
         <p class="field__error">${esc(f.error || "")}</p>
-        <div class="design-form__actions">
-          <button type="button" class="btn btn--outline btn--sm" data-action="design-form-close">${editable ? "취소" : "닫기"}</button>
-          ${editable ? `<button type="button" class="btn btn--primary btn--sm" data-action="design-form-save">저장</button>` : ""}
-        </div>
+        ${
+          editable
+            ? `<div class="design-form__actions">
+                 <button type="button" class="btn btn--outline btn--sm" data-action="design-form-close">취소</button>
+                 <button type="button" class="btn btn--primary btn--sm" data-action="design-form-save">저장</button>
+               </div>`
+            : ""
+        }
       </div>`;
   }
 
@@ -409,6 +435,7 @@
 
   function designBlock(v) {
     const editable = can.editDesign();
+    if (ctx.designForm) return `<div class="design">${designForm(editable)}</div>`;
     const menu = ctx.designMenu
       ? `<div class="add-menu" role="menu">
            <label class="add-menu__item" role="menuitem">
@@ -431,7 +458,6 @@
                <p class="field__error design-error">${esc(ctx.designError || "")}</p>`
             : ""
         }
-        ${designForm(editable)}
         ${designList(v, editable)}
       </div>`;
   }
@@ -481,13 +507,30 @@
       </div>`;
   }
 
+  // 투표 현황: 실험안마다 전체 표 가운데 받은 표의 비율을 막대로 보여준다 (최다 득표는 강조)
   function voteSummary(v) {
-    const ranked = v.experiments.filter((e) => e.votes.length).sort((a, b) => b.votes.length - a.votes.length);
-    const top = ranked.length ? ranked[0].votes.length : 0;
-    const chips = ranked
-      .map((e) => `<span class="vote-chip${e.votes.length === top ? " is-top" : ""}">V${v.no}-${e.letter} <b>${e.votes.length}</b>표</span>`)
+    const total = v.experiments.reduce((sum, e) => sum + e.votes.length, 0);
+    const top = Math.max(0, ...v.experiments.map((e) => e.votes.length));
+    const rows = v.experiments
+      .map((e) => {
+        const count = e.votes.length;
+        const pct = total ? Math.round((count / total) * 100) : 0;
+        return `
+          <li class="vote-bar${count && count === top ? " is-top" : ""}" data-vote-bar="${e.letter}">
+            <span class="vote-bar__name">V${v.no}-${e.letter}</span>
+            <span class="vote-bar__track" role="img" aria-label="V${v.no}-${e.letter} ${pct}%"><span class="vote-bar__fill" style="width:${pct}%"></span></span>
+            <span class="vote-bar__value"><b>${pct}%</b> ${count}표</span>
+          </li>`;
+      })
       .join("");
-    return `<div class="vote-summary"><span class="vote-summary__label">투표 현황</span>${chips || `<span class="muted-sm">아직 투표가 없습니다.</span>`}</div>`;
+    return `
+      <div class="vote-summary">
+        <div class="vote-summary__head">
+          <span class="vote-summary__label">투표 현황</span>
+          <span class="muted-sm">${total ? `전체 ${total}표` : "아직 투표가 없습니다."}</span>
+        </div>
+        <ul class="vote-bars">${rows}</ul>
+      </div>`;
   }
 
   // ---------- 실험안 카드 ----------
@@ -849,9 +892,10 @@
       ctx.editor = null;
       tabState().exp = null;
     } else {
-      Object.assign(ed, { isNew: false, dirty: false, error: "", note: "임시저장되었습니다." });
+      Object.assign(ed, { isNew: false, dirty: false, error: "", note: "" });
     }
     render();
+    if (mode === "temp") toast("임시 저장되었습니다.");
   }
 
   // "실험안 후보 확정": 의견수렴중으로 넘어가고, 실험 설계·실험안 작성은 보기 전용이 된다
@@ -1117,7 +1161,6 @@
           ctx.designMenu = false;
           ctx.designForm = { id: d.id, title: d.title, purpose: d.purpose, body: d.body, error: "" };
           render();
-          ctx.container.querySelector(".design-form").scrollIntoView({ block: "nearest" });
           break;
         }
         case "design-form-close":
@@ -1285,7 +1328,7 @@
         case "confirm-final":
           if (!can.editFinal()) return;
           confirmBox(
-            `V${v.no}-Final을 최종으로 확정할까요?\n확정하면 V${v.no}의 모든 내용을 더 이상 고칠 수 없습니다.`,
+            `V${v.no}-Final을 최종으로 확정할까요?`,
             () => {
               v.confirmedAt = today();
               advance(v, "final");
