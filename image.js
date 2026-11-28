@@ -3,17 +3,19 @@
 // 데이터는 메모리에만 있다. 새로고침하면 샘플 데이터로 돌아간다.
 // 실제 구현에서는 아래 state 구조를 API 로 읽고 쓰면 된다 (HANDOFF.md 참고).
 //
-// 버전 진행 단계(status)는 앞으로만 간다:
+// 버전 진행 단계(status):
 //   실험 설계(design) → 실험안 작성(draft) → 의견수렴중(testing) → 실험완료(done) → 최종(final)
+// 다음 단계로는 각 단계의 확정 버튼으로 넘어가고, 의견수렴중·실험완료·최종에서는 '전단계로 돌아가기'로 한 단계 되돌릴 수 있다.
 //
 //   실험 설계    실험 설계안을 여러 개 올린다 ('+ 실험 설계안' → 파일 첨부 / 직접 작성). 목록에서 대표 설계안을 고른다
 //   실험안 작성  실험안(A~J)을 추가·작성(임시저장 / 저장)·삭제. '실험안 후보 확정' → 의견수렴중
 //   의견수렴중   갤러리 카드에서 투표(이유 필수). '최종 선택' → 카드 고르기 → '확정' → 실험완료 (최종안 사본 Vn-Final 생성)
 //   실험완료     Vn-Final 을 다듬고 '최종 확정' → 최종
-//   최종         모두 읽기 전용. '새 버전으로 사본 생성'만 가능
+//   최종         모두 읽기 전용. '새 버전으로 사본 생성'(최종본 하나를 새 버전의 A안으로)과 '전단계로 돌아가기'만 가능
 //
 // 상태바에서 지나온 단계를 누르면 그 단계 화면을 볼 수 있다 (보는 단계 = view).
 // 의견수렴중이 되면 실험 설계·실험안 작성은 보기 전용이 되고, 지나간 단계는 모두 보기 전용이다.
+// 보기 전용으로 잠긴 단계는 상태바의 단계 이름 옆에 자물쇠 아이콘이 붙는다.
 //
 // 버전·실험안을 삭제하면 번호를 다시 매긴다 (V1 삭제 → V2 가 V1, 실험 B 삭제 → C 가 B).
 (function () {
@@ -37,6 +39,12 @@
   // 실험 설계안 파일: html, pptx, pdf, word 만. 용량 제한 없음
   const DESIGN_EXT_RE = /\.(html?|pptx|pdf|docx?)$/i;
   const DESIGN_ACCEPT = ".html,.htm,.pptx,.pdf,.doc,.docx";
+  // '전단계로 돌아가기' 확인 문구
+  const BACK_MESSAGES = {
+    testing: "이전 단계로 돌아가면 현재까지 진행된 투표 및 작성된 의견이 모두 초기화됩니다. 전단계로 돌아가시겠습니까?",
+    done: "이전 단계로 돌아가면 현재까지 작성된 내용이 모두 초기화됩니다. 전단계로 돌아가시겠습니까?",
+    final: "'실험완료' 단계로 돌아가면 최종 확정이 풀리고, 지금 최종본 내용 그대로 다시 수정할 수 있게 됩니다. 전단계로 돌아가시겠습니까?",
+  };
   const UNSAVED_MESSAGE =
     "저장되지 않은 실험안이 있습니다. 페이지에서 벗어나시면 작성된 내용이 사라질 수 있습니다. 페이지에서 벗어나시겠습니까?";
 
@@ -209,7 +217,13 @@
     vote: () => !!ctx.user && at("testing", "testing"),
     pickFinal: () => ctx.canEdit && at("testing", "testing"),
     editFinal: () => ctx.canEdit && at("done", "done"),
+    // 전단계로 돌아가기: 진행 중인 단계(의견수렴중·실험완료·최종) 화면에서만
+    goBack: () => ctx.canEdit && (at("testing", "testing") || at("done", "done") || at("final", "final")),
   };
+  // 보기 전용으로 잠긴 단계인지 (진행 단계 기준. 어떤 단계를 보고 있든 같다)
+  //   실험 설계·실험안 작성: 의견수렴중부터 / 의견수렴중: 실험완료부터 / 실험완료·최종: 최종일 때
+  const LOCK_FROM = { design: "testing", draft: "testing", testing: "done", done: "final", final: "final" };
+  const isLocked = (v, key) => stageIdx(v.status) >= stageIdx(LOCK_FROM[key]);
   const isEditing = (e) => !!ctx.editor && ctx.editor.data === e;
   const canEditCard = (e) => (e.letter === FINAL ? can.editFinal() : isEditing(e));
   const hasUnsaved = () => !!(ctx && ctx.editor && ctx.editor.dirty);
@@ -315,15 +329,15 @@
         .filter(Boolean)
         .join(" ");
       return `<button type="button" class="${cls}" data-action="go-stage" data-status="${s.key}" aria-current="${viewing ? "step" : "false"}" ${reachable ? "" : "disabled"}>
-        <span class="status-step__no">${i < sIdx ? "✓" : i + 1}</span>${s.label}</button>`;
+        <span class="status-step__no">${i < sIdx ? "✓" : i + 1}</span>${s.label}${
+          isLocked(v, s.key) ? `<span class="status-step__lock" role="img" aria-label="보기 전용" title="보기 전용">${LOCK}</span>` : ""
+        }</button>`;
     }).join("");
-    // 지나간 단계, 의견수렴중 이후의 실험 설계, 최종 = 보기 전용
-    const frozen = v.status === "final" || (view !== v.status && !(view === "design" && v.status === "draft"));
     return `
       <div class="status-row">
         <span class="status-row__label">상태</span>
         <div class="status-steps" aria-label="V${v.no} 상태">${steps}</div>
-        ${frozen ? `<span class="frozen-chip">${LOCK}보기 전용</span>` : ""}
+        ${can.goBack() ? `<button type="button" class="btn btn--outline btn--sm status-back" data-action="go-back">← 전단계로 돌아가기</button>` : ""}
       </div>`;
   }
 
@@ -874,6 +888,34 @@
     );
   }
 
+  // '전단계로 돌아가기': 진행 단계를 한 단계 되돌린다
+  //   의견수렴중 → 실험안 작성  투표·의견을 모두 지운다. 실험안은 다시 추가·수정·삭제할 수 있다
+  //   실험완료 → 의견수렴중     Vn-Final(실험 완료본)과 최종 선택을 지운다. 투표는 그대로 두고 다시 투표·최종 선택을 할 수 있다
+  //   최종 → 실험완료           최종본 내용 그대로 두고 최종 확정만 푼다
+  function goBack(v) {
+    if (!can.goBack()) return;
+    const from = v.status;
+    confirmBox(
+      BACK_MESSAGES[from],
+      () => {
+        if (from === "testing") {
+          v.experiments.forEach((e) => (e.votes = []));
+          advance(v, "draft");
+        } else if (from === "done") {
+          v.final = null;
+          v.finalLetter = null;
+          advance(v, "testing");
+        } else {
+          v.confirmedAt = null;
+          advance(v, "done");
+        }
+        render();
+        window.scrollTo(0, 0);
+      },
+      { okLabel: "전단계로 돌아가기", danger: from !== "final" }
+    );
+  }
+
   // ---------- 삭제 (확인 문구 입력 + 번호 다시 매기기) ----------
   const deleteModal = document.getElementById("delete-modal");
   const deleteInput = document.getElementById("delete-input");
@@ -1040,9 +1082,16 @@
           });
           break;
         case "copy-version":
-          // 최종 버전의 실험 설계안과 실험안을 그대로 복제해 실험안 작성 단계의 새 버전을 만든다 (투표·최종 선택·Final 은 넘기지 않는다)
-          if (!ctx.canEdit || v.status !== "final") return;
-          addVersion({ status: "draft", designs: copyDesigns(v.designs), mainDesign: v.mainDesign, experiments: v.experiments.map((x) => copyExp(x)) });
+          // 최종본(Vn-Final) 하나만 새 버전의 A안으로 복제한다. 이전 버전의 실험안 A~J 와 투표는 넘기지 않는다.
+          // 실험 설계안은 그대로 복제하고, 새 버전은 실험안 작성 단계에서 시작한다.
+          if (!ctx.canEdit || v.status !== "final" || !v.final) return;
+          {
+            const { source, ...first } = copyExp(v.final, LETTERS[0]);
+            addVersion({ status: "draft", designs: copyDesigns(v.designs), mainDesign: v.mainDesign, experiments: [first] });
+          }
+          break;
+        case "go-back":
+          goBack(v);
           break;
         case "go-stage":
           guardLeave(() => goStage(v, el.dataset.status));
